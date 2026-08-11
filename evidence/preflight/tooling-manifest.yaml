@@ -1,0 +1,65 @@
+# THINKAI KIDS — Preflight Tooling Manifest
+manifest_version: 1
+timestamp: "2026-08-11T14:30:00Z"
+phase: "preflight"
+
+verified_tools:
+  - name: "Git"
+    version: "2.53.0.windows.2"
+    executable: "C:\\Program Files\\Git\\cmd\\git.exe"
+    status: "verified"
+
+  - name: "Node.js"
+    version: "v24.14.0"
+    executable: "C:\\Program Files\\nodejs\\node.exe"
+    status: "verified"
+
+  - name: "npm"
+    version: "11.9.0"
+    executable: "C:\\Program Files\\nodejs\\npm.cmd"
+    status: "verified"
+
+  - name: "OpenAI Codex CLI"
+    version: "0.147.0"
+    executable: "C:\\Users\\Tu\\AppData\\Local\\Programs\\OpenAI\\Codex\\bin\\codex.exe"
+    status: "verified"
+    notes: "Native hooks and subagent TOML schemas configured in .codex/"
+
+  - name: "Beads"
+    package: "@beads/bd"
+    version: "1.1.2"
+    executable: "bd"
+    status: "verified"
+    notes: "Initialized local Dolt issue tracker with native Codex hooks"
+
+  - name: "Context7"
+    package: "ctx7"
+    version: "0.5.7"
+    executable: "ctx7"
+    status: "verified"
+    notes: "CLI + Skills mode installed; find-docs skill active at .agents/skills/find-docs"
+
+  - name: "Playwright CLI"
+    package: "@playwright/cli"
+    version: "0.1.17"
+    executable: "playwright-cli"
+    status: "verified"
+    notes: "CLI + Skills active at .agents/skills/playwright-cli and .claude/skills/playwright-cli"
+
+  - name: "Antigravity (AGY)"
+    status: "verified"
+    notes: "Handoff skill installed at .agents/skills/handoff-to-codex"
+
+deferred_tools:
+  - name: "Semantic Vector Memory"
+    status: "deferred"
+    reason: "Multi-layered memory (AGENTS.md -> docs -> ADRs -> Beads -> Git) provides sufficient context without vector overhead."
+
+  - name: "Promptfoo"
+    status: "deferred"
+    reason: "AI pipeline application code is not yet implemented; evals/README.md defines future testing harness criteria."
+
+decisions_and_commitments:
+  architecture: "undecided (pre-flight discovery)"
+  database_schema: "undecided (pre-flight discovery)"
+  product_features: "undecided (pre-flight discovery)"

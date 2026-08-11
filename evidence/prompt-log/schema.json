@@ -1,0 +1,97 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "NormalizedPromptRecord",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "prompt_id",
+    "timestamp",
+    "phase",
+    "source",
+    "actor",
+    "prompt"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "enum": [1]
+    },
+    "prompt_id": {
+      "type": "string",
+      "pattern": "^P[0-9]{6}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "phase": {
+      "type": "string"
+    },
+    "source": {
+      "type": "string",
+      "enum": ["antigravity", "chatgpt", "buzz", "codex", "other"]
+    },
+    "source_session_id": {
+      "type": ["string", "null"]
+    },
+    "source_message_id": {
+      "type": ["string", "null"]
+    },
+    "parent_prompt_id": {
+      "type": ["string", "null"]
+    },
+    "actor": {
+      "type": "string",
+      "enum": ["user", "lead", "subagent", "assistant", "system"]
+    },
+    "agent": {
+      "type": ["string", "null"]
+    },
+    "model": {
+      "type": ["string", "null"]
+    },
+    "provider": {
+      "type": ["string", "null"]
+    },
+    "harness": {
+      "type": ["string", "null"]
+    },
+    "prompt": {
+      "type": "string"
+    },
+    "response_summary": {
+      "type": ["string", "null"]
+    },
+    "tools_used": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "files_changed": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "beads_ids": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "git_commit_before": {
+      "type": ["string", "null"]
+    },
+    "git_commit_after": {
+      "type": ["string", "null"]
+    },
+    "raw_source_ref": {
+      "type": ["string", "null"]
+    },
+    "raw_source_sha256": {
+      "type": ["string", "null"]
+    },
+    "redacted": {
+      "type": "boolean"
+    },
+    "notes": {
+      "type": ["string", "null"]
+    }
+  },
+  "additionalProperties": false
+}

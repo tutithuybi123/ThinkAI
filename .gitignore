@@ -20,8 +20,10 @@ cap_sid
 config.toml
 sessions/
 .sandbox/
+evidence/private/
 
 # Playwright & E2E Testing artifacts
+.playwright-cli/
 test-results/
 playwright-report/
 blob-report/
