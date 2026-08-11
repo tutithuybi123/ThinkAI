@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "ThinkAI",
+  "project_id": "91838146-1f00-423c-86e4-c20f009a8890"
+}

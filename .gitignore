@@ -1,0 +1,76 @@
+# Node dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment & Secret files
+.env
+.env*.local
+.env.production
+.env.staging
+
+# Credentials & Auth state
+auth.json
+*.pem
+*.key
+*.crt
+cap_sid
+config.toml
+sessions/
+.sandbox/
+
+# Playwright & E2E Testing artifacts
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+screenshots/
+traces/
+*.png
+*.jpeg
+*.jpg
+*.webm
+
+# Build & Output directories
+dist/
+build/
+.next/
+out/
+.nuxt/
+.vuepress/dist/
+.serverless/
+
+# Python cache & venv
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+
+# IDE & Editor files
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Database & ephemeral state
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.db
+*.log
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+.beads-credential-key
+.beads/proxieddb/
