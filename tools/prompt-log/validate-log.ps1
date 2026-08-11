@@ -86,6 +86,15 @@ foreach ($file in $FilesToValidate) {
                 ParentId = $obj.parent_prompt_id
             }
         }
+
+        if ($obj.supersedes_prompt_id) {
+            $fileName = $file.Name
+            $ParentRefsToValidate += @{ File = $fileName; Line = $lineNum; ParentId = $obj.supersedes_prompt_id }
+        }
+
+        if ($obj.capture_status -eq "blocked_secret" -and $obj.prompt -ne "PROMPT_CAPTURE_BLOCKED_SECRET") {
+            $Errors += "File '$($file.Name)' line $lineNum : blocked_secret record must not contain prompt content"
+        }
     }
 }
 

@@ -1,204 +1,113 @@
 [CmdletBinding()]
 param (
     [Parameter(Position = 0, Mandatory = $true)]
-    [ValidateSet("new-session", "append", "close-session")]
+    [ValidateSet("new-session", "append", "append-record", "correct", "close-session")]
     [string]$Action,
-
-    [Parameter(Mandatory = $false)]
     [string]$Prompt,
-
-    [Parameter(Mandatory = $false)]
     [string]$Actor = "user",
-
-    [Parameter(Mandatory = $false)]
     [string]$Source = "antigravity",
-
-    [Parameter(Mandatory = $false)]
     [string]$Phase = "preflight",
-
-    [Parameter(Mandatory = $false)]
     [string]$SessionId,
-
-    [Parameter(Mandatory = $false)]
     [string]$ParentPromptId,
-
-    [Parameter(Mandatory = $false)]
+    [string]$SupersedesPromptId,
     [string]$Notes,
-
-    [Parameter(Mandatory = $false)]
-    [string]$ResponseSummary
+    [string]$ResponseSummary,
+    [string]$RecordJson,
+    [string]$RepoRoot
 )
 
 $ErrorActionPreference = "Stop"
-
-$RepoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..")
+if (-not $RepoRoot) { $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path }
 $SessionsDir = Join-Path $RepoRoot "evidence\prompt-log\sessions"
 
-if (-not (Test-Path $SessionsDir)) {
-    New-Item -ItemType Directory -Path $SessionsDir -Force | Out-Null
-}
-
 function Get-GitHead {
+    try { $sha = git -C $RepoRoot rev-parse HEAD 2>$null; if ($LASTEXITCODE -eq 0 -and $sha) { return $sha.Trim() } } catch {}
+    return $null
+}
+function Get-MutexName {
+    $bytes = [Text.Encoding]::UTF8.GetBytes($RepoRoot.ToLowerInvariant())
+    $hash = [Security.Cryptography.SHA256]::Create().ComputeHash($bytes)
+    return "ThinkAI-PromptLog-" + ([BitConverter]::ToString($hash).Replace("-", "").Substring(0, 24))
+}
+function Invoke-WithLogLock([scriptblock]$Body) {
+    $mutex = [Threading.Mutex]::new($false, (Get-MutexName))
     try {
-        $gitSha = git -C $RepoRoot rev-parse HEAD 2>$null
-        if ($LASTEXITCODE -eq 0 -and $gitSha) {
-            return $gitSha.Trim()
-        }
-    } catch {}
-    return $null
+        if (-not $mutex.WaitOne([TimeSpan]::FromSeconds(30))) { throw "Timed out waiting for the prompt-log writer lock." }
+        & $Body
+    } finally {
+        try { $mutex.ReleaseMutex() } catch {}
+        $mutex.Dispose()
+    }
 }
-
-function Get-NextPromptId {
-    $existingFiles = Get-ChildItem -Path $SessionsDir -Filter "*.jsonl" -ErrorAction SilentlyContinue
-    $maxNum = 0
-    foreach ($file in $existingFiles) {
-        $lines = Get-Content $file.FullName
-        foreach ($line in $lines) {
-            if ($line -match '"prompt_id"\s*:\s*"P([0-9]{6})"') {
-                $num = [int]$matches[1]
-                if ($num -gt $maxNum) { $maxNum = $num }
-            }
+function Get-NextPromptIdLocked {
+    $max = 0
+    Get-ChildItem -Path $SessionsDir -Filter "*.jsonl" -ErrorAction SilentlyContinue | ForEach-Object {
+        Select-String -Path $_.FullName -Pattern '"prompt_id"\s*:\s*"P([0-9]{6})"' -AllMatches | ForEach-Object {
+            foreach ($m in $_.Matches) { $n = [int]$m.Groups[1].Value; if ($n -gt $max) { $max = $n } }
         }
     }
-    $next = $maxNum + 1
-    return ("P{0:D6}" -f $next)
+    return ("P{0:D6}" -f ($max + 1))
 }
-
-function Get-ActiveSessionFile {
+function Write-JsonLineLocked([string]$FilePath, [object]$Record) {
+    $line = $Record | ConvertTo-Json -Compress -Depth 8
+    $utf8 = [Text.UTF8Encoding]::new($false)
+    $stream = [IO.FileStream]::new($FilePath, [IO.FileMode]::Append, [IO.FileAccess]::Write, [IO.FileShare]::Read)
+    try { $writer = [IO.StreamWriter]::new($stream, $utf8); try { $writer.WriteLine($line); $writer.Flush() } finally { $writer.Dispose() } } finally { $stream.Dispose() }
+}
+function New-BaseRecord([string]$PromptText) {
+    return [ordered]@{
+        schema_version = 1; prompt_id = $null; timestamp = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+        phase = $Phase; source = $Source; source_session_id = $SessionId; source_message_id = $null
+        parent_prompt_id = $ParentPromptId; supersedes_prompt_id = $SupersedesPromptId; runtime_parent_id = $null; runtime_agent_id = $null
+        actor = $Actor; agent = $null; model = $null; provider = $null; harness = $null; prompt = $PromptText
+        response_summary = $ResponseSummary; tools_used = @(); files_changed = @(); beads_ids = @()
+        git_commit_before = (Get-GitHead); git_commit_after = (Get-GitHead); raw_source_ref = $null; raw_source_sha256 = $null
+        redacted = $false; capture_status = "captured"; notes = $Notes
+    }
+}
+function Get-SessionFileLocked {
     if ($SessionId) {
-        $target = Join-Path $SessionsDir "$SessionId.jsonl"
-        if (Test-Path $target) { return $target }
+        $safe = $SessionId -replace '[^A-Za-z0-9._-]', '_'
+        return (Join-Path $SessionsDir "$safe.jsonl")
     }
-    $files = Get-ChildItem -Path $SessionsDir -Filter "*.jsonl" | Sort-Object CreationTime -Descending
-    if ($files.Count -gt 0) {
-        return $files[0].FullName
-    }
-    return $null
+    $latest = Get-ChildItem -Path $SessionsDir -Filter "*.jsonl" -ErrorAction SilentlyContinue | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
+    if ($latest) { return $latest.FullName }
+    return (Join-Path $SessionsDir ("session-" + (Get-Date).ToUniversalTime().ToString("yyyyMMdd-HHmmss") + ".jsonl"))
 }
 
-$Timestamp = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-$GitCommit = Get-GitHead
+if (-not (Test-Path $SessionsDir)) { New-Item -ItemType Directory -Path $SessionsDir -Force | Out-Null }
 
-switch ($Action) {
-    "new-session" {
-        $dateStr = (Get-Date).ToUniversalTime().ToString("yyyyMMdd-HHmmss")
-        $newSessionId = "session-$dateStr"
-        $filePath = Join-Path $SessionsDir "$newSessionId.jsonl"
-        $promptId = Get-NextPromptId
-        
-        $record = [ordered]@{
-            schema_version     = 1
-            prompt_id          = $promptId
-            timestamp          = $Timestamp
-            phase              = $Phase
-            source             = $Source
-            source_session_id  = $newSessionId
-            source_message_id  = $null
-            parent_prompt_id   = $null
-            actor              = "system"
-            agent              = $null
-            model              = $null
-            provider           = $null
-            harness            = $null
-            prompt             = "SESSION_START: $newSessionId initialized"
-            response_summary   = $null
-            tools_used         = @()
-            files_changed      = @()
-            beads_ids          = @()
-            git_commit_before  = $GitCommit
-            git_commit_after   = $GitCommit
-            raw_source_ref     = $null
-            raw_source_sha256  = $null
-            redacted           = $false
-            notes              = if ($Notes) { $Notes } else { "Session initialized" }
+Invoke-WithLogLock {
+    switch ($Action) {
+        "append-record" {
+            if ([string]::IsNullOrWhiteSpace($RecordJson)) { throw "append-record requires -RecordJson." }
+            $record = $RecordJson | ConvertFrom-Json
+            if (-not $record.PSObject.Properties["prompt"] -or [string]::IsNullOrWhiteSpace([string]$record.prompt)) { throw "append-record requires a non-empty prompt." }
+            $record | Add-Member -NotePropertyName prompt_id -NotePropertyValue (Get-NextPromptIdLocked) -Force
+            if (-not $record.PSObject.Properties["timestamp"] -or -not $record.timestamp) { $record | Add-Member -NotePropertyName timestamp -NotePropertyValue ((Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")) -Force }
+            if (-not $record.PSObject.Properties["schema_version"]) { $record | Add-Member -NotePropertyName schema_version -NotePropertyValue 1 }
+            $target = Get-SessionFileLocked
+            Write-JsonLineLocked $target $record
+            Write-Output $record.prompt_id
         }
-
-        $jsonStr = $record | ConvertTo-Json -Compress
-        Add-Content -Path $filePath -Value $jsonStr -Encoding UTF8
-        Write-Host "New session created: $filePath (Prompt ID: $promptId)"
-    }
-
-    "append" {
-        if ([string]::IsNullOrWhiteSpace($Prompt)) {
-            Write-Error "Action 'append' requires a non-empty -Prompt argument."
-            exit 1
+        "new-session" {
+            if (-not $SessionId) { $SessionId = "session-" + (Get-Date).ToUniversalTime().ToString("yyyyMMdd-HHmmss") }
+            $record = New-BaseRecord "SESSION_START: $SessionId initialized"; $record.prompt_id = Get-NextPromptIdLocked; $record.actor = "system"
+            if (-not $record.notes) { $record.notes = "Session initialized" }; Write-JsonLineLocked (Get-SessionFileLocked) $record; Write-Output $record.prompt_id
         }
-        $sessionFile = Get-ActiveSessionFile
-        if (-not $sessionFile) {
-            Write-Error "No active session file found. Run 'new-session' first."
-            exit 1
+        "append" {
+            if ([string]::IsNullOrWhiteSpace($Prompt)) { throw "Action 'append' requires a non-empty -Prompt." }
+            $record = New-BaseRecord $Prompt; $record.prompt_id = Get-NextPromptIdLocked; Write-JsonLineLocked (Get-SessionFileLocked) $record; Write-Output $record.prompt_id
         }
-        $promptId = Get-NextPromptId
-
-        $record = [ordered]@{
-            schema_version     = 1
-            prompt_id          = $promptId
-            timestamp          = $Timestamp
-            phase              = $Phase
-            source             = $Source
-            source_session_id  = (Get-Item $sessionFile).BaseName
-            source_message_id  = $null
-            parent_prompt_id   = if ($ParentPromptId) { $ParentPromptId } else { $null }
-            actor              = $Actor
-            agent              = $null
-            model              = $null
-            provider           = $null
-            harness            = $null
-            prompt             = $Prompt
-            response_summary   = if ($ResponseSummary) { $ResponseSummary } else { $null }
-            tools_used         = @()
-            files_changed      = @()
-            beads_ids          = @()
-            git_commit_before  = $GitCommit
-            git_commit_after   = $GitCommit
-            raw_source_ref     = $null
-            raw_source_sha256  = $null
-            redacted           = $false
-            notes              = if ($Notes) { $Notes } else { $null }
+        "correct" {
+            if ([string]::IsNullOrWhiteSpace($Prompt) -or [string]::IsNullOrWhiteSpace($SupersedesPromptId)) { throw "correct requires -Prompt and -SupersedesPromptId." }
+            $record = New-BaseRecord $Prompt; $record.prompt_id = Get-NextPromptIdLocked; $record.actor = "system"; $record.capture_status = "correction"
+            if (-not $record.notes) { $record.notes = "Append-only correction record" }; Write-JsonLineLocked (Get-SessionFileLocked) $record; Write-Output $record.prompt_id
         }
-
-        $jsonStr = $record | ConvertTo-Json -Compress
-        Add-Content -Path $sessionFile -Value $jsonStr -Encoding UTF8
-        Write-Host "Appended record $promptId to $sessionFile"
-    }
-
-    "close-session" {
-        $sessionFile = Get-ActiveSessionFile
-        if (-not $sessionFile) {
-            Write-Error "No active session file found to close."
-            exit 1
+        "close-session" {
+            $record = New-BaseRecord "SESSION_CLOSE: $SessionId closed"; $record.prompt_id = Get-NextPromptIdLocked; $record.actor = "system"; $record.capture_status = "session_close"
+            if (-not $record.notes) { $record.notes = "Session closed cleanly" }; Write-JsonLineLocked (Get-SessionFileLocked) $record; Write-Output $record.prompt_id
         }
-        $promptId = Get-NextPromptId
-
-        $record = [ordered]@{
-            schema_version     = 1
-            prompt_id          = $promptId
-            timestamp          = $Timestamp
-            phase              = $Phase
-            source             = $Source
-            source_session_id  = (Get-Item $sessionFile).BaseName
-            source_message_id  = $null
-            parent_prompt_id   = $null
-            actor              = "system"
-            agent              = $null
-            model              = $null
-            provider           = $null
-            harness            = $null
-            prompt             = "SESSION_CLOSE: $(Get-Item $sessionFile).BaseName closed"
-            response_summary   = $null
-            tools_used         = @()
-            files_changed      = @()
-            beads_ids          = @()
-            git_commit_before  = $GitCommit
-            git_commit_after   = $GitCommit
-            raw_source_ref     = $null
-            raw_source_sha256  = $null
-            redacted           = $false
-            notes              = if ($Notes) { $Notes } else { "Session closed cleanly" }
-        }
-
-        $jsonStr = $record | ConvertTo-Json -Compress
-        Add-Content -Path $sessionFile -Value $jsonStr -Encoding UTF8
-        Write-Host "Closed session with record $promptId in $sessionFile"
     }
 }
+exit 0

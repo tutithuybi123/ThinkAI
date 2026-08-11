@@ -40,6 +40,16 @@
     "parent_prompt_id": {
       "type": ["string", "null"]
     },
+    "supersedes_prompt_id": {
+      "type": ["string", "null"],
+      "pattern": "^P[0-9]{6}$"
+    },
+    "runtime_parent_id": {
+      "type": ["string", "null"]
+    },
+    "runtime_agent_id": {
+      "type": ["string", "null"]
+    },
     "actor": {
       "type": "string",
       "enum": ["user", "lead", "subagent", "assistant", "system"]
@@ -88,6 +98,9 @@
     },
     "redacted": {
       "type": "boolean"
+    },
+    "capture_status": {
+      "type": "string"
     },
     "notes": {
       "type": ["string", "null"]

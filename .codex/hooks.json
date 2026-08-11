@@ -34,6 +34,16 @@
           }
         ],
         "matcher": "startup|resume|clear"
+      },
+      {
+        "hooks": [
+          {
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/prompt-log/codex-hook.ps1 -EventName SessionStart",
+            "statusMessage": "Recording Codex session provenance",
+            "type": "command"
+          }
+        ],
+        "matcher": "startup|resume|clear"
       }
     ],
     "UserPromptSubmit": [
@@ -42,6 +52,15 @@
           {
             "command": "bd codex-hook UserPromptSubmit",
             "statusMessage": "Refreshing Beads context",
+            "type": "command"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/prompt-log/codex-hook.ps1 -EventName UserPromptSubmit",
+            "statusMessage": "Recording sanitized Codex prompt evidence",
             "type": "command"
           }
         ]

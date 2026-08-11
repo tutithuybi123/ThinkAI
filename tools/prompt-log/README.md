@@ -27,6 +27,10 @@ Validates JSONL session logs against structural rules, prompt ID uniqueness, tim
 .\tools\prompt-log\validate-log.ps1
 ```
 
+### Codex hook validation
+
+Run `powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\prompt-log\tests\codex-hook.tests.ps1` before enabling changes. It uses only synthetic prompts and an isolated temporary evidence root. After it passes, submit one harmless marker through Codex, then run `validate-log.ps1`, `export-index.ps1`, and `checksum.ps1`.
+
 ### 3. `export-index.ps1`
 Generates `evidence/prompt-log/index.csv` from all canonical JSONL session logs.
 

@@ -1,13 +1,13 @@
-# SHA-256 Evidence Artifact Checksums
-# Generated at: 2026-08-11T16:55:22Z
+﻿# SHA-256 Evidence Artifact Checksums
+# Generated at: 2026-08-11T17:42:59Z
 2b2d016b18f72a0c4d37da2e3c1dc7c880625bd02ec319ded556e80424e6ac3f  evidence/preflight/README.md
 67a4268c43b94a7bc326513a7d186e56bfab52dbbd1da05602d9a529a298a86b  evidence/preflight/source-manifest.jsonl
 a9a39cbe35b026b73e4d5b9927357185db0e025f6d463eeaa9b4a0b5df408ea4  evidence/preflight/timeline.md
 101bbe31631bdb06d72f0b74089fb43f209d835f01d39fe2c507ae0ea205e1a3  evidence/preflight/tooling-manifest.yaml
 f263a1623bae52003a41b776965b250146843c51657260971190e3b7eca6f3c8  evidence/PRIVATE_STORAGE.md
-2710de08bc1b14708e470bc57a1c07860c970a39c0acb52e34560b0838a3fc29  evidence/prompt-log/index.csv
-c0189e644258ef9ad504f2b598188b1f6f5ec9bb626a06af78fa733dc3554f16  evidence/prompt-log/README.md
-a817bef01c58c774f5ec244458bef423220fb344668c9b362e05df6ab6cdba95  evidence/prompt-log/schema.json
+1f8d9e9314a89470921538c1de5b6539cf0cb82fe990f31bf0f4a76f1ce87155  evidence/prompt-log/index.csv
+83e467e60023297a02e47ae1caf021a23b261bdf23a3a180bd04552d271601f1  evidence/prompt-log/README.md
+93701ca9caaddd541efebbe1a3b27466cbc5556bf73a26b74384a84a84511fc0  evidence/prompt-log/schema.json
 2daa1ccd0f36d65538dd4b9a59d277a2d069f45c5fc7db472ae69802b857b011  evidence/prompt-log/sessions/.gitkeep
 79a041298743c828893af491b081eeb38c33b267c58766b2c280b1d56f0f1da0  evidence/prompt-log/sessions/session-20260811-080509.jsonl
 4888b6c1f1e13a1ad26bf8af904552d913fc204e04872ec77a556918da12ef26  evidence/prompt-log/sessions/session-20260811-094827.jsonl
