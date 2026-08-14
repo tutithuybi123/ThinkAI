@@ -1,0 +1,15 @@
+source_id,type,title,url,year,claim_boundary
+T01,peer_reviewed_field_experiment,Generative AI without guardrails can harm learning,https://doi.org/10.1073/pnas.2422633122,2025,High-school math context; assisted practice and subsequent unaided exam; does not generalize to every AI tutor.
+T02,peer_reviewed_RCT,AI tutoring outperforms in-class active learning,https://doi.org/10.1038/s41598-025-97652-6,2025,Short Harvard introductory-physics crossover study; immediate learning gains; not long-term broad deployment proof.
+T03,meta_analysis,Transfer of test-enhanced learning,https://pubmed.ncbi.nlm.nih.gov/29733621/,2018,Retrieval practice transfer average with important moderators; not an AI study.
+T04,meta_analysis,Self-explanation and learning,https://doi.org/10.1007/s10648-018-9434-x,2018,Supports self-explanation under studied conditions; not universal intervention proof.
+T05,peer_reviewed_study,Productive failure,https://doi.org/10.1080/07370000802212669,2008,Learning mechanism evidence; context-dependent and not a product validation.
+T06,peer_reviewed_STEM_meta_analysis,Spaced retrieval practice in introductory STEM courses,https://doi.org/10.1186/s40594-024-00468-5,2024,Supports spaced retrieval with variation; not a precise scheduling algorithm.
+T07,official_product,Khanmigo,https://www.khanacademy.org/khan-labs,accessed-2026-08-12,Official feature claims for Socratic guidance and answer withholding; not independent efficacy proof.
+T08,official_product,ALEKS research behind,https://www.aleks.com/about_aleks/research_behind,accessed-2026-08-12,Official knowledge-space/adaptive assessment description; product claims require independent evaluation.
+T09,official_product,ALEKS periodic assessment description,https://www.aleks.com/about_aleks/HowALEKSWorks_TextDescription,accessed-2026-08-12,Official retention/mastery workflow claim; establishes prior art.
+T10,official_product,ChatGPT Study Mode release notes,https://help.openai.com/en/articles/11391654-chatgpt-business-release-notes,2025,Official interactive/Socratic feature description; does not establish transfer or retention outcomes.
+T11,official_product,Gemini Guided Learning,https://blog.google/products-and-platforms/products/education/guided-learning,2025,Official guided-learning feature description; feature evidence only.
+T12,peer_reviewed_conference,Uncertainty-aware Knowledge Tracing,https://ojs.aaai.org/index.php/AAAI/article/view/35007/37162,2025,Models uncertainty in knowledge tracing; does not validate a student-facing digital twin.
+T13,repository_experiment,ThinkAI frontier misconception reality check,../frontier-reality-check/README.md,2026,Local fixed-task model evaluation; not a student learning study.
+T14,official_research_report,LearnLM and Gemini Guided Learning research,https://cloud.google.com/solutions/learnlm,2026,Google reports a preregistered Sierra Leone mathematics RCT; official report summary and not independently analyzed in this pass.

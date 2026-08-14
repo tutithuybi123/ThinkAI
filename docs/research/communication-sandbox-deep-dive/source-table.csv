@@ -1,0 +1,21 @@
+source_id,kind,title_or_product,url,year_or_accessed,evidence_strength,claim_boundary
+S01,systematic_review,Computer-assisted pronunciation training: a systematic review,https://doi.org/10.1017/S0958344024000181,2024,high,CAPT evidence mostly concerns adult English controlled practice; it does not validate generic AI conversation coaching.
+S02,meta_analysis,The Effectiveness of Second Language Pronunciation Instruction,https://doi.org/10.1093/applin/amu040,2015,high,Feedback can improve targeted L2 pronunciation outcomes; it does not validate a particular automated score.
+S03,meta_analysis,Effects of Second Language Pronunciation Teaching Revisited,https://doi.org/10.1111/lang.12345,2019,high,Targeted production improves more reliably than global spontaneous-speech judgments.
+S04,paper,Automatic scoring of non-native spontaneous speech in tests of spoken English,https://doi.org/10.1016/j.specom.2009.04.009,2009,medium,Automatic scoring can correlate within a defined test but is assessment-specific.
+S05,survey,Argument Mining: A Survey,https://doi.org/10.1162/coli_a_00364,2020,high,Argument schemes and domain transfer remain limiting factors.
+S06,paper,Parsing Argumentation Structures in Persuasive Essays,https://doi.org/10.1162/COLI_a_00295,2017,high,Written persuasive-essay components/relations do not validate oral debate scoring.
+S07,dataset,SpeechOcean762,https://huggingface.co/datasets/mispeech/speechocean762,accessed-2026-08-12,high,English read-aloud human pronunciation/prosody labels; Mandarin L1 and not spontaneous speech.
+S08,dataset,L2-ARCTIC,https://psi.engr.tamu.edu/l2-arctic-corpus/,accessed-2026-08-12,medium,Accented English and phone-error annotations; reuse terms require direct verification.
+S09,dataset,Common Voice datasets,https://commonvoice.mozilla.org/en/datasets,accessed-2026-08-12,medium,Vietnamese ASR candidate only; no pronunciation/prosody labels.
+S10,official_api,Microsoft Pronunciation Assessment,https://learn.microsoft.com/en-us/azure/ai-services/speech-service/how-to-pronunciation-assessment,accessed-2026-08-12,high,English prosody is documented as en-US only; do not infer Vietnamese parity.
+S11,official_api,OpenAI Realtime conversations,https://developers.openai.com/api/docs/guides/realtime-conversations,accessed-2026-08-12,high,Low-latency voice simulation substrate, not a validated assessor.
+S12,official_product,Yoodli public speaking,https://yoodli.ai/use-cases/public-speaking,accessed-2026-08-12,medium,Vendor-described roleplay and delivery/content feedback; no independent efficacy conclusion.
+S13,independent_product,Yoodli institutional overview,https://westoahu.hawaii.edu/distancelearning/tips/try-yoodli-an-ai-powered-speech-coach/,accessed-2026-08-12,medium,Independent feature confirmation, not learning-outcome evidence.
+S14,official_product,ELSA AI,https://elsaspeak.com/en/ai,accessed-2026-08-12,medium,Vendor-described English roleplay/feedback; not Vietnamese validation.
+S15,official_product,Duolingo Video Call,https://blog.duolingo.com/video-call/,accessed-2026-08-12,medium,Adaptive spoken AI conversation; it does not correct grammar during a call.
+S16,official_product,VirtualSpeech speech analytics,https://virtualspeech.com/blog/analysing-speech-in-vr-with-feedback,accessed-2026-08-12,medium,Vendor-described simulated audiences and analytics; some visual measures are acknowledged simplifications.
+S17,official_product,Ovation VR,https://www.ovationvr.com/,accessed-2026-08-12,low,Vendor-described presentation and roleplay simulator.
+S18,official_product,Poised real-time communication feedback,https://www.poised.com/products/real-time,accessed-2026-08-12,medium,Vendor-described delivery feedback in live meetings.
+S19,official_product,Orai speech practice,https://orai.com/,accessed-2026-08-12,medium,Vendor-described pace/filler/clarity practice baseline.
+S20,official_api,Gemini Live native audio model,https://ai.google.dev/gemini-api/docs/models/gemini-2.5-flash-native-audio-preview-12-2025,accessed-2026-08-12,high,Realtime simulation alternative; named model is preview.
