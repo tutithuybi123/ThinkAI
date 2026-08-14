@@ -31,6 +31,7 @@ test("golden API flow delegates policy to services and keeps transfer DTO isolat
   assert.equal((await post(`/api/v1/challenges/${practiceId}/transfer/start`, { sessionId: transferId }, "e")).status, 201);
   const transferDone = await post(`/api/v1/transfers/${transferId}/submissions`, { answer: "fixture" }, "f");
   assert.equal(transferDone.status, 200); assert.equal(JSON.stringify(transferDone.body).includes("hint_"), false);
+  assert.equal((await post(`/api/v1/transfers/${transferId}/connection/reveal`, {}, "reveal")).status, 200);
   assert.equal((await post("/api/v1/receipts/issue", { practiceSessionId: practiceId, transferSessionId: transferId }, "g")).status, 201);
   assert.equal((await dispatch(services, { method: "GET", path: "/api/v1/progress", actorId: actor })).status, 200);
   assert.equal((await dispatch(services, { method: "POST", path: "/api/v1/challenges/start", actorId: actor, body: {} })).status, 400);
