@@ -1,5 +1,7 @@
 # Append-only evidence and state machines
 
+> **Status: Active supporting v1.0 evidence/state contract.** Preserve append-only and isolation invariants. v1.1 adds assistance, aggregate-grading and content-version facts; current extensions are governed by [v1.1-amendment-contracts.md](v1.1-amendment-contracts.md).
+
 ## Event envelope
 
 Every event is committed in the same transaction as the state change it evidences. Historical facts never change; a later correction appends a correction event referencing the earlier event.

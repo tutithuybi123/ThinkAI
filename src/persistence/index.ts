@@ -5,7 +5,12 @@ import { validateEvidenceEvent, type EvidenceEvent } from "../evidence/schema.js
 export interface StoredEvidenceEvent { readonly sequence: number; readonly event: EvidenceEvent; }
 export interface SessionSnapshot { readonly sessionId: string; readonly kind: "challenge" | "transfer"; readonly contentIntegrityKey: string; readonly state: Readonly<Record<string, unknown>>; }
 export interface EvidenceProjection { readonly actorId: ActorId; readonly skillId: SkillId; readonly eventCount: number; readonly lastSequence: number; readonly lastOccurredAt: string; }
-export interface AppendEvidenceCommand { readonly events: readonly EvidenceEvent[]; readonly idempotencyKey?: string; readonly session?: SessionSnapshot; readonly contentSnapshot?: ReviewedPairSnapshot; }
+/**
+ * `actorSessionId` is a transport-authentication fence, not learning evidence.
+ * Production writes verify it in the same transaction as the append so reset
+ * cannot leave a previously verified browser session able to write afterwards.
+ */
+export interface AppendEvidenceCommand { readonly events: readonly EvidenceEvent[]; readonly idempotencyKey?: string; readonly session?: SessionSnapshot; readonly contentSnapshot?: ReviewedPairSnapshot; readonly actorSessionId?: string; }
 export interface AppendEvidenceResult { readonly events: readonly StoredEvidenceEvent[]; readonly replayed: boolean; }
 
 export interface EvidenceEventRepository { append(events: readonly EvidenceEvent[]): Promise<readonly StoredEvidenceEvent[]>; list(actorId?: ActorId): Promise<readonly StoredEvidenceEvent[]>; }
@@ -21,6 +26,33 @@ function jsonObject(value: unknown, label: string): Record<string, unknown> {
   return parsed as Record<string, unknown>;
 }
 function optionalString(value: unknown): string | undefined { return typeof value === "string" ? value : undefined; }
+
+/**
+ * Session snapshots are mutable read models, unlike evidence events.  Every domain
+ * mutation carries its complete operation ledger.  Rejecting a write that omits an
+ * operation already committed by another tab prevents the stale-writer “last write
+ * wins” failure mode without making event history mutable.
+ */
+export class PersistenceError extends Error {
+  public constructor(public readonly code: "SESSION_CONCURRENT_MODIFICATION" | "SESSION_REVOKED" | "IDEMPOTENCY_CONFLICT", message: string) { super(message); this.name = "PersistenceError"; }
+}
+function assertNoSessionRollback(current: SessionSnapshot | undefined, next: SessionSnapshot): void {
+  if (!current) return;
+  if (current.kind !== next.kind || current.contentIntegrityKey !== next.contentIntegrityKey) {
+    throw new Error(`Session ${next.sessionId} changed immutable identity while being updated.`);
+  }
+  const currentOperations = jsonObject(current.state, "Current session snapshot").operations;
+  const nextOperations = jsonObject(next.state, "Next session snapshot").operations;
+  if (!currentOperations || typeof currentOperations !== "object" || Array.isArray(currentOperations)
+    || !nextOperations || typeof nextOperations !== "object" || Array.isArray(nextOperations)) {
+    throw new Error(`Session ${next.sessionId} has no valid operation ledger.`);
+  }
+  for (const operationKey of Object.keys(currentOperations)) {
+    if (!Object.prototype.hasOwnProperty.call(nextOperations, operationKey)) {
+      throw new PersistenceError("SESSION_CONCURRENT_MODIFICATION", `SESSION_CONCURRENT_MODIFICATION: session ${next.sessionId} was updated by another request.`);
+    }
+  }
+}
 function hydrateEvent(row: Record<string, unknown>): StoredEvidenceEvent {
   const event = {
     id: String(row.id) as EvidenceEventId, type: String(row.type) as EvidenceEvent["type"], actorId: String(row.actor_id) as ActorId,
@@ -54,15 +86,24 @@ export function rebuildEvidenceProjections(events: readonly StoredEvidenceEvent[
   return Object.freeze([...projections.values()]);
 }
 
-interface DatabaseState { events: StoredEvidenceEvent[]; sessions: Map<string, SessionSnapshot>; content: Map<string, ReviewedPairSnapshot>; idempotency: Map<string, { fingerprint: string; result: AppendEvidenceResult }>; projections: EvidenceProjection[]; nextSequence: number; }
+export interface DemoResetAuditRecord { readonly actorId: ActorId; readonly resetBy: ActorId; readonly fixtureVersion: string; readonly occurredAt: string; }
+export interface DatabaseState { events: StoredEvidenceEvent[]; sessions: Map<string, SessionSnapshot>; content: Map<string, ReviewedPairSnapshot>; idempotency: Map<string, { fingerprint: string; result: AppendEvidenceResult }>; projections: EvidenceProjection[]; nextSequence: number; demoResetAudit: DemoResetAuditRecord[]; }
 export class MemoryPersistenceDatabase {
-  public state: DatabaseState = { events: [], sessions: new Map(), content: new Map(), idempotency: new Map(), projections: [], nextSequence: 1 };
+  public state: DatabaseState = { events: [], sessions: new Map(), content: new Map(), idempotency: new Map(), projections: [], nextSequence: 1, demoResetAudit: [] };
 }
 
 /** Transactional reference implementation used by tests and local isolated execution. */
 export class TransactionalEvidencePersistence implements EvidenceEventRepository {
+  private pending: Promise<void> = Promise.resolve();
   public constructor(private readonly database = new MemoryPersistenceDatabase()) {}
   public async appendCommand(command: AppendEvidenceCommand): Promise<AppendEvidenceResult> {
+    let release!: () => void;
+    const previous = this.pending;
+    this.pending = new Promise<void>((resolve) => { release = resolve; });
+    await previous;
+    try { return await this.appendExclusive(command); } finally { release(); }
+  }
+  private async appendExclusive(command: AppendEvidenceCommand): Promise<AppendEvidenceResult> {
     const state = clone(this.database.state);
     const requestFingerprint = fingerprint(command);
     if (command.idempotencyKey) {
@@ -80,6 +121,7 @@ export class TransactionalEvidencePersistence implements EvidenceEventRepository
     if (command.contentSnapshot) state.content.set(command.contentSnapshot.integrityKey, clone(command.contentSnapshot));
     if (command.session) {
       if (!state.content.has(command.session.contentIntegrityKey)) throw new Error(`Session ${command.session.sessionId} references an unknown content snapshot.`);
+      assertNoSessionRollback(state.sessions.get(command.session.sessionId), command.session);
       state.sessions.set(command.session.sessionId, clone(command.session));
     }
     const stored = command.events.map((event) => Object.freeze({ sequence: state.nextSequence++, event: clone(event) }));
@@ -172,7 +214,23 @@ export class PostgresTransactionalEvidencePersistence {
   public async appendCommand(command: AppendEvidenceCommand): Promise<AppendEvidenceResult> {
     const requestFingerprint = fingerprint(command);
     return this.client.transaction(async (tx) => {
+      const fencedActorId = command.events[0]?.actorId ?? (command.session?.state.actorId as ActorId | undefined);
+      if (command.actorSessionId) {
+        if (!fencedActorId) throw new PersistenceError("SESSION_REVOKED", "A session-fenced command must identify its actor.");
+        // Reset acquires this same transaction-scoped actor lock before deleting
+        // demo data and clearing current_session_id.
+        await tx.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`actor-session:${fencedActorId}`]);
+        const active = await tx.query<{ current_session_id: string | null }>("SELECT current_session_id FROM synthetic_actor_sessions WHERE actor_id = $1 FOR UPDATE", [fencedActorId]);
+        if (active.rows[0]?.current_session_id !== command.actorSessionId) {
+          throw new PersistenceError("SESSION_REVOKED", "The actor session was revoked before this change could be recorded.");
+        }
+      }
+      // One session snapshot is a mutable projection. Locking its table serializes
+      // distinct-key mutations until per-session revisioned writes are introduced.
+      // Evidence facts remain append-only and idempotency stays request-specific.
+      if (command.session) await tx.query("LOCK TABLE session_snapshots IN SHARE ROW EXCLUSIVE MODE");
       if (command.idempotencyKey) {
+        await tx.query("SELECT pg_advisory_xact_lock(hashtext($1))", [command.idempotencyKey]);
         const prior = await tx.query<{ request_fingerprint: string; result: AppendEvidenceResult }>("SELECT request_fingerprint, result FROM idempotency_records WHERE operation_key = $1 FOR UPDATE", [command.idempotencyKey]);
         if (prior.rows[0]) {
           if (prior.rows[0].request_fingerprint !== requestFingerprint) throw new Error(`Idempotency key ${command.idempotencyKey} was reused for a different command.`);
@@ -180,12 +238,32 @@ export class PostgresTransactionalEvidencePersistence {
         }
       }
       if (command.contentSnapshot) await tx.query("INSERT INTO content_snapshots (integrity_key,snapshot) VALUES ($1,$2::jsonb) ON CONFLICT (integrity_key) DO NOTHING", [command.contentSnapshot.integrityKey, JSON.stringify(command.contentSnapshot)]);
-      if (command.session) await tx.query("INSERT INTO session_snapshots (session_id,session_kind,content_integrity_key,snapshot) VALUES ($1,$2,$3,$4::jsonb) ON CONFLICT (session_id) DO UPDATE SET snapshot = EXCLUDED.snapshot, recorded_at = now()", [command.session.sessionId, command.session.kind, command.session.contentIntegrityKey, JSON.stringify(command.session.state)]);
+      if (command.session) {
+        const priorSession = await tx.query<{ session_id: string; session_kind: string; content_integrity_key: string; snapshot: unknown }>("SELECT session_id,session_kind,content_integrity_key,snapshot FROM session_snapshots WHERE session_id = $1 FOR UPDATE", [command.session.sessionId]);
+        const row = priorSession.rows[0];
+        if (row) {
+          const current: SessionSnapshot = Object.freeze({ sessionId: row.session_id, kind: row.session_kind as SessionSnapshot["kind"], contentIntegrityKey: row.content_integrity_key, state: Object.freeze(jsonObject(row.snapshot, "Stored session snapshot")) });
+          assertNoSessionRollback(current, command.session);
+        }
+        await tx.query("INSERT INTO session_snapshots (session_id,session_kind,content_integrity_key,snapshot) VALUES ($1,$2,$3,$4::jsonb) ON CONFLICT (session_id) DO UPDATE SET snapshot = EXCLUDED.snapshot, recorded_at = now()", [command.session.sessionId, command.session.kind, command.session.contentIntegrityKey, JSON.stringify(command.session.state)]);
+      }
       const stored: StoredEvidenceEvent[] = [];
       for (const event of command.events) {
         const issues = validateEvidenceEvent(event); if (issues.length) throw new Error(`Invalid evidence event ${event.id}.`);
         const row = await tx.query<{ sequence: string }>(`INSERT INTO evidence_events (id,type,actor_id,correlation_id,challenge_session_id,transfer_session_id,skill_id,task_id,task_version,task_family_id,occurred_at,schema_version,scorer_version,policy_version,provenance,payload) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::jsonb) RETURNING sequence`, [event.id,event.type,event.actorId,event.correlationId,event.challengeSessionId ?? null,event.transferSessionId ?? null,event.skillId,event.taskId ?? null,event.taskVersion ?? null,event.taskFamilyId ?? null,event.occurredAt,event.schemaVersion,event.scorerVersion ?? null,event.policyVersion ?? null,event.provenance,JSON.stringify(event.payload)]);
         stored.push(Object.freeze({ sequence: Number(row.rows[0]?.sequence), event: clone(event) }));
+        if (event.type === "capability_receipt_issued") {
+          const sourceEventIds = event.payload.sourceEventIds;
+          const receiptId = event.payload.receiptId;
+          const transferScoredEventId = Array.isArray(sourceEventIds) ? sourceEventIds[1] : undefined;
+          if (typeof receiptId !== "string" || typeof transferScoredEventId !== "string" || !event.policyVersion) {
+            throw new Error("Capability receipt event is missing its qualifying transfer-score reference.");
+          }
+          await tx.query(
+            "INSERT INTO capability_receipts (receipt_id,actor_id,transfer_scored_event_id,policy_version,issued_event_id,issued_at) VALUES ($1,$2,$3,$4,$5,$6)",
+            [receiptId, event.actorId, transferScoredEventId, event.policyVersion, event.id, event.occurredAt],
+          );
+        }
       }
       for (const projection of rebuildEvidenceProjections(stored)) await tx.query(`INSERT INTO evidence_projections (actor_id,skill_id,event_count,last_sequence,last_occurred_at) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (actor_id,skill_id) DO UPDATE SET event_count = evidence_projections.event_count + EXCLUDED.event_count, last_sequence = EXCLUDED.last_sequence, last_occurred_at = EXCLUDED.last_occurred_at`, [projection.actorId, projection.skillId, projection.eventCount, projection.lastSequence, projection.lastOccurredAt]);
       const result: AppendEvidenceResult = Object.freeze({ events: Object.freeze(stored), replayed: false });
@@ -193,6 +271,10 @@ export class PostgresTransactionalEvidencePersistence {
       return result;
     });
   }
+  public async list(actorId?: ActorId): Promise<readonly StoredEvidenceEvent[]> { return new PostgresEvidenceRepository(this.client).list(actorId); }
+  public async find(sessionId: string): Promise<SessionSnapshot | undefined> { return new PostgresSessionSnapshotRepository(this.client).find(sessionId); }
+  public async findContent(integrityKey: string): Promise<ReviewedPairSnapshot | undefined> { return new PostgresContentSnapshotRepository(this.client).find(integrityKey); }
+  public async listProjections(): Promise<readonly EvidenceProjection[]> { return new PostgresProjectionRepository(this.client).list(); }
 }
 
 export function isSameEvidenceEventId(left: EvidenceEventId, right: EvidenceEventId): boolean { return left === right; }

@@ -25,6 +25,17 @@ export class ReviewedContentRepository implements SnapshotSource {
     return pair;
   }
 
+  /** Selection policy is server-owned. MVP exposes the sole approved pair only. */
+  public selectApprovedPair(): ReviewedTaskPair {
+    const approved = [...this.pairs.values()].filter((pair) => {
+      const practice = this.tasks.get(pair.practiceTaskId);
+      const transfer = this.tasks.get(pair.transferTaskId);
+      return pair.review.status === "approved" && practice?.review.status === "approved" && transfer?.review.status === "approved";
+    });
+    if (approved.length !== 1) throw new Error("Exactly one approved MVP task pair must be available for server selection.");
+    return approved[0]!;
+  }
+
   public getTask(id: string): TaskContent {
     const task = this.tasks.get(id as TaskId);
     if (!task) throw new Error(`Task ${id} is unavailable.`);

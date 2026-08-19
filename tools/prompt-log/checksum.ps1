@@ -1,26 +1,10 @@
 [CmdletBinding()]
-param ()
-
+param([string]$RepoRoot, [string]$OutputPath)
 $ErrorActionPreference = "Stop"
-
-$RepoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..")
-$EvidenceDir = Join-Path $RepoRoot "evidence"
-$OutputFile = Join-Path $EvidenceDir "preflight\checksums.sha256"
-
-$FilesToHash = Get-ChildItem -Path $EvidenceDir -Recurse -File | Where-Object {
-    $rel = $_.FullName.Substring($RepoRoot.Path.Length + 1).Replace("\", "/")
-    # Exclude checksums file itself, private storage dir, index.csv, and temp files
-    $rel -ne "evidence/preflight/checksums.sha256" -and
-    -not $rel.StartsWith("evidence/private/") -and
-    -not $rel.EndsWith(".tmp")
-} | Sort-Object FullName
-
-$lines = @("# SHA-256 Evidence Artifact Checksums", "# Generated at: $(Get-Date -Format 'yyyy-MM-ddTHH:mm:ssZ')")
-foreach ($file in $FilesToHash) {
-    $hash = (Get-FileHash -Path $file.FullName -Algorithm SHA256).Hash.ToLower()
-    $relPath = $file.FullName.Substring($RepoRoot.Path.Length + 1).Replace("\", "/")
-    $lines += "$hash  $relPath"
-}
-
-$lines | Set-Content -Path $OutputFile -Encoding UTF8
-Write-Host "Updated SHA-256 checksums for $($FilesToHash.Count) artifact(s) in $OutputFile"
+if (-not $RepoRoot) { $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path }
+$EvidenceDir = Join-Path $RepoRoot "evidence"; $OutputFile = if ($OutputPath) { $OutputPath } else { Join-Path $EvidenceDir "preflight\checksums.sha256" }
+$files = Get-ChildItem -Path $EvidenceDir -Recurse -File | Where-Object { $rel=$_.FullName.Substring($RepoRoot.Length+1).Replace("\","/"); $rel -ne "evidence/preflight/checksums.sha256" -and -not $rel.StartsWith("evidence/private/") -and -not $rel.EndsWith(".tmp") } | Sort-Object { $_.FullName.Substring($RepoRoot.Length+1).Replace("\","/") }
+$lines = @("# SHA-256 Evidence Artifact Checksums", "# Deterministically generated; excludes this manifest and evidence/private/.")
+foreach($file in $files){$hash=(Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant();$rel=$file.FullName.Substring($RepoRoot.Length+1).Replace("\","/");$lines += "$hash  $rel"}
+[IO.Directory]::CreateDirectory((Split-Path -Parent $OutputFile)) | Out-Null
+[IO.File]::WriteAllLines($OutputFile,$lines,[Text.UTF8Encoding]::new($false));Write-Host "Updated SHA-256 checksums for $($files.Count) artifact(s) in $OutputFile"

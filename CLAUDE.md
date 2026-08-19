@@ -75,3 +75,13 @@ _Add a brief overview of your project architecture_
 ## Conventions & Patterns
 
 _Add your project-specific conventions here_
+
+## Implementation Visual Guardrail
+
+During implementation, reproduce the approved THINKAI Figma system rather
+than performing a visual redesign. Do not add decorative UI to fill space,
+replace the open-row grammar with generic cards, or introduce new
+colors/radii/shadows/type roles. Do not consult taste-skill or external design
+references. Reuse existing product components and semantic tokens first; when
+a required state is not designed, use the closest approved grammar and flag the
+ambiguity rather than inventing a new design language.

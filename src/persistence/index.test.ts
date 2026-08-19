@@ -31,6 +31,19 @@ test("projections are rebuildable and a new repository reloads the durable datab
   assert.deepEqual(await reader.rebuild(events), rebuilt); assert.deepEqual(await reader.listProjections(), rebuilt); assert.equal(events.length, 2);
 });
 
+test("distinct-key stale session mutations are rejected instead of rolling a snapshot backwards", async () => {
+  const database = new MemoryPersistenceDatabase();
+  const store = new TransactionalEvidencePersistence(database);
+  const content = { pair: { id: "pair_lock", version: "1" }, practiceTask: { id: "task_lock", version: "1" }, transferTask: { id: "task_lock_transfer", version: "1" }, interventions: [], integrityKey: "snapshot_lock" };
+  const base = { sessionId: "challenge_lock", kind: "challenge" as const, contentIntegrityKey: content.integrityKey, state: { operations: {} } };
+  await store.appendCommand({ events: [makeEvent(1)], contentSnapshot: content, session: base, idempotencyKey: "start" });
+  const first = { ...base, state: { operations: { attempt: { fingerprint: "attempt" } } } };
+  const staleSecond = { ...base, state: { operations: { submit: { fingerprint: "submit" } } } };
+  await store.appendCommand({ events: [makeEvent(2)], session: first, idempotencyKey: "attempt" });
+  await assert.rejects(() => store.appendCommand({ events: [{ ...makeEvent(2), id: evidenceEventId("event_persist_3") }], session: staleSecond, idempotencyKey: "submit" }), /SESSION_CONCURRENT_MODIFICATION/);
+  assert.deepEqual(Object.keys(((await store.find("challenge_lock"))?.state.operations as Record<string, unknown>)), ["attempt"]);
+});
+
 test("PostgreSQL repositories hydrate persisted events and snapshots after restart", async () => {
   const event = makeEvent(2);
   const snapshot = { pair: { id: "pair_pg", version: "1" }, practiceTask: { id: "task_pg", version: "1" }, transferTask: { id: "task_pg_transfer", version: "1" }, interventions: [], integrityKey: "snapshot_pg" };

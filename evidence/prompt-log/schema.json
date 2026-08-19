@@ -16,6 +16,10 @@
       "type": "integer",
       "enum": [1]
     },
+    "record_type": {
+      "type": "string",
+      "enum": ["PROMPT", "SESSION_START", "PROMPT_RECOVERY"]
+    },
     "prompt_id": {
       "type": "string",
       "pattern": "^P[0-9]{6}$"
@@ -44,6 +48,16 @@
       "type": ["string", "null"],
       "pattern": "^P[0-9]{6}$"
     },
+    "recovery_of": {
+      "type": ["string", "null"],
+      "pattern": "^P[0-9]{6}$"
+    },
+    "recovery_method": {
+      "type": ["string", "null"]
+    },
+    "recovered_exact": {
+      "type": ["boolean", "null"]
+    },
     "runtime_parent_id": {
       "type": ["string", "null"]
     },
@@ -64,6 +78,9 @@
       "type": ["string", "null"]
     },
     "harness": {
+      "type": ["string", "null"]
+    },
+    "reasoning": {
       "type": ["string", "null"]
     },
     "prompt": {
@@ -98,6 +115,14 @@
     },
     "redacted": {
       "type": "boolean"
+    },
+    "redaction_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "redaction_types": {
+      "type": "array",
+      "items": { "type": "string" }
     },
     "capture_status": {
       "type": "string"

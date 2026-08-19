@@ -1,5 +1,9 @@
 # THINKAI KIDS — Development Guide [PRE-FLIGHT DISCOVERY]
 
+> **Current session entrypoint:** Read [CURRENT.md](CURRENT.md) first.
+>
+> This guide preserves pre-flight workflow history. Its instructions to inspect `PRODUCT.md` and `ARCHITECTURE.md` first are historical and must not override the current v1.1 authority order in `CURRENT.md`.
+
 This document covers local setup, tool verification, and instructions for how AI agents (OpenAI Codex and Antigravity) should start and end sessions during Pre-flight Product Discovery.
 
 ---
@@ -51,8 +55,8 @@ playwright-cli close
 
 ### START OF SESSION:
 
-1. **Read Core Guidelines**: Read [`AGENTS.md`](file:///C:/Users/Tu/Desktop/DU%20AN/ThinkAI/AGENTS.md).
-2. **Inspect Pre-Flight Docs**: Review [`docs/PRODUCT.md`](file:///C:/Users/Tu/Desktop/DU%20AN/ThinkAI/docs/PRODUCT.md) and [`docs/ARCHITECTURE.md`](file:///C:/Users/Tu/Desktop/DU%20AN/ThinkAI/docs/ARCHITECTURE.md).
+1. **Read Core Guidelines**: Read [`../AGENTS.md`](../AGENTS.md).
+2. **Historical instruction replaced**: Start with [`CURRENT.md`](CURRENT.md), not the pre-flight `PRODUCT.md` and `ARCHITECTURE.md` documents.
 3. **Inspect Repository State**: Run `git status --porcelain=v1 -uall` and `git log -n 5`.
 4. **Inspect Task State**: Run `bd ready` to check discovery tasks.
 5. **Identify Concrete Task**: Pick one specific evaluation task.

@@ -106,20 +106,24 @@ interface ChallengeState {
 export interface StartPracticeChallengeCommand {
   readonly sessionId: ChallengeSessionId;
   readonly actorId: ActorId;
-  readonly pairId: TaskPairId;
+  /** Deprecated compatibility field. Server policy deliberately ignores it. */
+  readonly pairId?: TaskPairId;
   readonly idempotencyKey: string;
+  readonly actorSessionId?: string;
 }
 
 export interface RecordAttemptCommand {
   readonly sessionId: ChallengeSessionId;
   readonly actorId: ActorId;
   readonly idempotencyKey: string;
+  readonly actorSessionId?: string;
 }
 
 export interface DeclareCannotStartCommand {
   readonly sessionId: ChallengeSessionId;
   readonly actorId: ActorId;
   readonly idempotencyKey: string;
+  readonly actorSessionId?: string;
 }
 
 export interface OpenReviewedHintCommand {
@@ -127,6 +131,7 @@ export interface OpenReviewedHintCommand {
   readonly actorId: ActorId;
   readonly interventionId: InterventionId;
   readonly idempotencyKey: string;
+  readonly actorSessionId?: string;
 }
 
 export interface SubmitPracticeAnswerCommand {
@@ -134,6 +139,7 @@ export interface SubmitPracticeAnswerCommand {
   readonly actorId: ActorId;
   readonly answer: SubmittedAnswer;
   readonly idempotencyKey: string;
+  readonly actorSessionId?: string;
 }
 
 export interface PracticeChallengeServiceOptions {
@@ -250,10 +256,10 @@ export class PracticeChallengeService {
   public async start(command: StartPracticeChallengeCommand): Promise<PracticeChallengeCommandResult> {
     requireNonEmpty(command.idempotencyKey, "idempotencyKey");
     const existing = await this.persistence.find(command.sessionId);
-    const fingerprint = JSON.stringify({ action: "start", actorId: command.actorId, pairId: command.pairId });
+    const pair = this.content.selectApprovedPair();
+    const fingerprint = JSON.stringify({ action: "start", actorId: command.actorId, pairId: pair.id, pairVersion: pair.version });
     if (existing) return this.replayExisting(command.sessionId, command.actorId, existing, command.idempotencyKey, fingerprint);
 
-    const pair = this.content.getReviewedPair(command.pairId);
     const task = this.content.getTask(pair.practiceTaskId);
     this.assertApprovedPractice(pair, task);
     const snapshot = this.content.createPairSnapshot(pair.id);
@@ -285,6 +291,7 @@ export class PracticeChallengeService {
       idempotencyKey: `practice:${command.sessionId}:${command.idempotencyKey}`,
       contentSnapshot: snapshot,
       session: this.session(command.sessionId, next),
+      ...(command.actorSessionId === undefined ? {} : { actorSessionId: command.actorSessionId }),
     });
     return { replayed: false, challenge: this.view(command.sessionId, next) };
   }
@@ -323,7 +330,7 @@ export class PracticeChallengeService {
       precedingAttemptOrdinal: loaded.state.attemptCount,
       exactContentHash: bodyHash(intervention),
     });
-    await this.persist(command.sessionId, command.idempotencyKey, next, [event]);
+    await this.persist(command.sessionId, command.idempotencyKey, next, [event], command.actorSessionId);
     return { replayed: false, challenge: this.view(command.sessionId, next) };
   }
 
@@ -355,7 +362,7 @@ export class PracticeChallengeService {
       ...(score.normalizedAnswer === undefined ? {} : { normalizedAnswer: score.normalizedAnswer }),
       ...(score.reasonCode === undefined ? {} : { reasonCode: score.reasonCode }),
     }, score.scorerVersion);
-    await this.persist(command.sessionId, command.idempotencyKey, next, [submitted, scored]);
+    await this.persist(command.sessionId, command.idempotencyKey, next, [submitted, scored], command.actorSessionId);
     return { replayed: false, challenge: this.view(command.sessionId, next), score };
   }
 
@@ -380,7 +387,7 @@ export class PracticeChallengeService {
     }), command.idempotencyKey, fingerprint);
     const events: EvidenceEvent[] = [this.event(command.sessionId, command.idempotencyKey, 0, next, loaded.task, "attempt_submitted", { kind, ordinal: next.attemptCount })];
     if (kind === "cannot_start") events.push(this.event(command.sessionId, command.idempotencyKey, 1, next, loaded.task, "unable_to_start_declared", { ordinal: next.attemptCount }));
-    await this.persist(command.sessionId, command.idempotencyKey, next, events);
+    await this.persist(command.sessionId, command.idempotencyKey, next, events, command.actorSessionId);
     return { replayed: false, challenge: this.view(command.sessionId, next) };
   }
 
@@ -503,8 +510,8 @@ export class PracticeChallengeService {
     return Object.freeze({ sessionId, kind: "challenge", contentIntegrityKey: state.contentIntegrityKey, state: state as unknown as Readonly<Record<string, unknown>> });
   }
 
-  private async persist(sessionId: ChallengeSessionId, idempotencyKey: string, state: ChallengeState, events: readonly EvidenceEvent[]): Promise<void> {
-    await this.persistence.appendCommand({ events, idempotencyKey: `practice:${sessionId}:${idempotencyKey}`, session: this.session(sessionId, state) });
+  private async persist(sessionId: ChallengeSessionId, idempotencyKey: string, state: ChallengeState, events: readonly EvidenceEvent[], actorSessionId?: string): Promise<void> {
+    await this.persistence.appendCommand({ events, idempotencyKey: `practice:${sessionId}:${idempotencyKey}`, session: this.session(sessionId, state), ...(actorSessionId === undefined ? {} : { actorSessionId }) });
   }
 
   private timestamp(): string {

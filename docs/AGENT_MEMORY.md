@@ -1,5 +1,7 @@
 # Layered Agent Memory System
 
+> **Current session entrypoint:** Read [CURRENT.md](CURRENT.md) first, then [DOCUMENT_MAP.md](DOCUMENT_MAP.md) only when deeper navigation is needed. This document remains an evergreen description of memory layers, not the current Competition Demo product authority.
+
 This document explains how persistent knowledge, work tracking, and architectural decisions are layered across tools in the THINKAI KIDS repository.
 
 ---
@@ -10,9 +12,9 @@ To maintain reliable continuity across AI agent sessions without bloated context
 
 | Layer | Storage Location | Content & Purpose | Mutated By |
 | :--- | :--- | :--- | :--- |
-| **1. Operational Guidelines** | [`AGENTS.md`](file:///C:/Users/Tu/Desktop/DU%20AN/ThinkAI/AGENTS.md) | Durable rules, safety constraints, coding principles | Human / Lead Agent |
-| **2. Core Product & Arch** | [`docs/`](file:///C:/Users/Tu/Desktop/DU%20AN/ThinkAI/docs/) | Product purpose, current scope, component architecture, dev workflows | Human / Lead Agent |
-| **3. Architectural Decisions** | [`docs/decisions/`](file:///C:/Users/Tu/Desktop/DU%20AN/ThinkAI/docs/decisions/) | Immutable records of architectural choices (ADRs) | Human / Lead Agent |
+| **1. Operational Guidelines** | [`../AGENTS.md`](../AGENTS.md) | Durable rules, safety constraints, coding principles | Human / Lead Agent |
+| **2. Core Product & Arch** | [`CURRENT.md`](CURRENT.md), then `docs/` supporting references | Product purpose, current scope, component architecture, dev workflows | Human / Lead Agent |
+| **3. Architectural Decisions** | [`decisions/`](decisions/) | Immutable records of architectural choices (ADRs) | Human / Lead Agent |
 | **4. Task & Work State** | `Beads` (`.beads/` via `bd`) | Task tracking, dependencies, blockers, small operational facts (`bd remember`) | **Lead Agent Only** |
 | **5. Source Code & History** | `Git` (`.git/`) | Implementation history, exact code diffs, commit logs | Lead Agent / Developers |
 | **6. Active Session Context** | Codex / AGY runtime | Transient conversational context for current task execution | Session Agent |

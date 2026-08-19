@@ -8,6 +8,7 @@ pnpm-debug.log*
 # Environment & Secret files
 .env
 .env*.local
+.env.benchmark.local
 .env.production
 .env.staging
 
@@ -39,6 +40,7 @@ traces/
 dist/
 build/
 .next/
+.next-runtime-acceptance-*/
 out/
 .nuxt/
 .vuepress/dist/
@@ -71,6 +73,14 @@ Thumbs.db
 *.sqlite-shm
 *.db
 *.log
+*.tsbuildinfo
+
+# Local planning and research scratch artifacts
+.superpowers/
+inside.txt
+runtime-test.txt
+temptask.md
+tavily-*.json
 
 # Beads / Dolt files (added by bd init)
 .dolt/

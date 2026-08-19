@@ -7,14 +7,23 @@
   "scripts": {
     "check": "tsc --noEmit",
     "test": "tsx --test",
-    "test:package-a": "tsx --test"
+    "test:package-a": "tsx --test",
+    "test:runtime": "tsx --test src/runtime/http-acceptance.test.ts"
   },
   "engines": {
     "node": ">=24.0.0"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",
+    "@types/react": "19.2.18",
     "tsx": "^4.23.12",
-    "typescript": "^7.0.2"
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@types/pg": "^8.21.0",
+    "next": "^16.1.6",
+    "pg": "^8.23.0",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3"
   }
 }

@@ -1,5 +1,7 @@
 # Domain and content model
 
+> **Status: Active supporting v1.0 content model.** v1.1 extends this model with Subject/Topic/MicroSkill, reviewed rubric facets, lifecycle revisions and published pair banks. Read [v1.1-amendment-contracts.md](v1.1-amendment-contracts.md) before using this document for new work.
+
 ## Domain entities
 
 | Entity | Responsibility / identifier | Persisted immutable fields | Mutable fields | Relations / lifecycle | User-facing |

@@ -166,3 +166,23 @@ For version-specific docs, use `/org/project/version` from the `library` output 
 If a command fails with a quota error, inform the user and suggest `npx ctx7@latest login` or setting `CONTEXT7_API_KEY` env var for higher limits. Do not silently fall back to training data.
 Run Context7 CLI requests outside Codex's default sandbox. If a Context7 CLI command fails with DNS or network errors such as ENOTFOUND, host resolution failures, or fetch failed, rerun it outside the sandbox instead of retrying inside the sandbox.
 <!-- context7 -->
+
+The visual exploration phase is complete.
+
+Never use taste-skill or external visual references during normal
+product expansion.
+
+A new screen must look unsurprising next to the approved production
+screens.
+
+Novelty is now considered design drift unless required by function.
+
+## Implementation Visual Guardrail
+
+During implementation, reproduce the approved THINKAI Figma system rather
+than performing a visual redesign. Do not add decorative UI to fill space,
+replace the open-row grammar with generic cards, or introduce new
+colors/radii/shadows/type roles. Do not consult taste-skill or external design
+references. Reuse existing product components and semantic tokens first; when
+a required state is not designed, use the closest approved grammar and flag the
+ambiguity rather than inventing a new design language.

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="190" viewBox="0 0 400 190" role="img" aria-labelledby="title desc">
+  <title id="title">Bảng giá trị của quan hệ tuyến tính y theo x</title>
+  <desc id="desc">Bảng gồm ba cặp giá trị: x bằng 2, 5, 7 tương ứng y bằng 7, 16, 22.</desc>
+  <rect width="400" height="190" fill="white"/>
+  <text x="40" y="30" font-family="Arial, sans-serif" font-size="18" font-weight="bold">Bảng giá trị</text>
+  <g stroke="#0f172a" stroke-width="2" fill="none"><rect x="40" y="50" width="320" height="100"/><path d="M120 50V150 M200 50V150 M280 50V150 M40 100H360"/></g>
+  <g font-family="Arial, sans-serif" font-size="20" text-anchor="middle" fill="#0f172a"><text x="80" y="82">x</text><text x="160" y="82">2</text><text x="240" y="82">5</text><text x="320" y="82">7</text><text x="80" y="132">y</text><text x="160" y="132">7</text><text x="240" y="132">16</text><text x="320" y="132">22</text></g>
+</svg>

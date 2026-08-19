@@ -1,5 +1,7 @@
 # ThinkAI product direction: learning that survives without AI
 
+> **Status: Historical product-discovery evidence.** This directory contains important rationale and long-term hypotheses, but its “no final project selected” wording is not current execution authority. Read [../../CURRENT.md](../../CURRENT.md) for current Competition Demo v1.1.
+
 **Status:** product discovery for human review. No MVP, architecture, or final project has been selected.
 
 ## Executive finding

@@ -1,5 +1,7 @@
 # Persistence, isolation, security and resilience
 
+> **Status: Active supporting v1.0 persistence/security reference.** It remains current for PostgreSQL, session isolation and privacy baselines. Apply v1.1 amendment contracts for new content revisions, assistance provenance and operational conversation retention.
+
 ## Persistence decision
 
 Use PostgreSQL as the canonical deployed store because the existing `.env.example` already declares a PostgreSQL URL and the MVP needs transactional append-only history across a resettable demo. Use migrations from the first implementation; the exact TypeScript ORM/query builder is not yet installed and is intentionally not frozen here. SQLite is acceptable only for fast, isolated local unit tests if migration parity is checked.

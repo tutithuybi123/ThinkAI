@@ -1,5 +1,7 @@
 # Dependency graph and freeze gates
 
+> **Status: Historical v1.0 implementation dependency graph; active supporting backend-core reference.** Do not execute it as the current v1.1 plan. Current slice order is [../../superpowers/plans/2026-08-19-competition-demo-v1.1-final-implementation.md](../../superpowers/plans/2026-08-19-competition-demo-v1.1-final-implementation.md).
+
 ## Dependency order
 
 ```mermaid
@@ -22,7 +24,8 @@ flowchart TD
   I --> K[Frontend integration]
   J --> L[Golden demo E2E]
   K --> L
-  M[Optional AI adapter] -. non-blocking .-> I
+  I --> M[Bounded live AI adapter]
+  M --> L
 ```
 
 ## Implementation packages
@@ -39,7 +42,7 @@ flowchart TD
 | H. API | E + F + G | validated route contract | integration golden server flow |
 | I. Demo/reset | C + G + H | clean/history fixtures, safe reset, health | deterministic reset/historical labels |
 | J. Frontend | H + I | UI surfaces consume view models | contract/E2E scenario |
-| K. Optional AI | H (not a prerequisite) | bounded non-authoritative feedback | malformed/timeout fallback |
+| K. Bounded live AI | H | non-authoritative live reasoning feedback for the frozen Demo normal path; deterministic fallback remains for failure resilience | provider/schema/provenance/malformed/timeout tests |
 
 ## Safe parallel work
 
@@ -88,7 +91,7 @@ After C/D merge, only one owner should change shared domain DTOs, migrations and
 
 ### READY FOR DEMO E2E
 
-- [ ] Golden browser flow passes against a deployed-like database and deterministic AI-off path.
+- [ ] Golden browser flow passes against a deployed-like database with a real bounded AI normal path and an explicitly labelled AI-unavailable fallback path.
 - [ ] Presenter reset returns to exact clean state repeatedly.
 - [ ] Receipt is visibly derived from current live events; history is visibly seeded/historical.
 - [ ] `/healthz`, database failure handling and AI fallback are exercised.

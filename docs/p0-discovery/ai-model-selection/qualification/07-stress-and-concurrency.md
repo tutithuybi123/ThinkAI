@@ -1,0 +1,5 @@
+# Stress and Concurrency
+
+The stress run used 200 real requests to the `gpt-5.4-mini` request ID at concurrency 16: 200 completed and schema-valid. It must not be interpreted as hard-gate-clean because the then-current evaluator omitted dataset canary/answer checks. An earlier interrupted matrix exposed duplicate run IDs when two runners overlapped. The harness now creates an exclusive `.lock`, rejects pre-existing duplicate IDs, checkpoints JSONL after each normalized result, and releases the lock on normal completion. The earlier artifact is retained privately as failure evidence and is not used in results.
+
+Corrected concurrency probes completed cleanly at 2, 4, 8, and 16 concurrent workers (10 calls each): all requests completed/schema-valid/hard-gate-clean with no duplicate IDs. The deliberate interrupt at concurrency 1 left a stale lock, exposing that stale-lock recovery is not yet implemented. This is a remaining qualification failure: resume cannot be certified until owner-liveness or a safely expiring lock protocol is implemented and tested.

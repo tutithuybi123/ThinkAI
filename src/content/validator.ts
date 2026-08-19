@@ -64,10 +64,12 @@ function validateAnswerSpec(
       }
       break;
     case "numeric":
-    case "expression":
       if (!isNonEmpty(answerSpec.expected)) {
         issues.push({ path, code: "INVALID_ANSWER_SPEC", message: "expected answer is required" });
       }
+      break;
+    case "expression":
+      issues.push({ path, code: "INVALID_ANSWER_SPEC", message: "expression scoring is not enabled for authoritative MVP content" });
       break;
     case "choice":
       if (!Array.isArray(answerSpec.acceptedOptionIds) || answerSpec.acceptedOptionIds.length === 0 || hasDuplicates(answerSpec.acceptedOptionIds)) {

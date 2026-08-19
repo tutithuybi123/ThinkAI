@@ -1,0 +1,2 @@
+import assert from "node:assert/strict"; import { State,recover } from "./checkpoint-fence.mjs";
+const records=[{runId:"a",state:State.IN_FLIGHT},{runId:"a",state:State.COMPLETED,result:{},resultRef:"result-a"}]; assert.equal(recover(records)[0].state,State.COMPLETED); assert.equal(recover([{runId:"b",state:State.IN_FLIGHT}])[0].state,State.UNKNOWN_AFTER_CRASH); assert.equal(recover(records).filter(x=>x.state===State.COMPLETED).length,1); console.log("real runner lifecycle integration tests passed");

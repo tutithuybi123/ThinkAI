@@ -1,6 +1,7 @@
 # ADR-006: Keep authoritative scoring deterministic
 
-- **Status**: Accepted
+- **Status**: Accepted — partially amended by ADR-011 for v1.1 written-reasoning grading
+- **Current reader**: Read ADR-011 for constrained reviewed-rubric facet evidence and server aggregation. Deterministic authority for reliable applicable validators remains active.
 - **Date**: 2026-08-14
 - **Author**: ThinkAI team (ratified by product owner)
 

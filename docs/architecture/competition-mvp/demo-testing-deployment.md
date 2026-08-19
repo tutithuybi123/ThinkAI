@@ -1,5 +1,7 @@
 # Demo data, testing and deployment boundary
 
+> **Status: Active supporting v1.0 testing/deployment reference.** It does not establish v1.1 provider readiness, Content Studio, hybrid grading or final deployment status; use the final v1.1 plan for those execution gates.
+
 ## Fixture specification
 
 Fixtures are structural placeholders, not validated educational content.
@@ -30,7 +32,7 @@ The content loader rejects missing approved review records, mismatched skill IDs
 | `demo-history` | Home/Progress historical delayed evidence | `historical_seed` and visible timestamp | never used for live walkthrough; can be reseeded separately |
 | `demo-audit` | restricted presenter/audit view | synthetic | cannot be reached from normal student nav |
 
-`POST /demo/reset` is available only to a presenter session or local protected mode. It uses a fixture version and transaction, records `demo_reset_audit`, and returns an explicit completion result. It must never reset arbitrary real accounts. Seeded receipt/history UI carries `Dữ liệu demo` in audit and `Lịch sử · [date]` in student history where relevant.
+`POST /api/v1/demo/reset` is available only to a presenter session or local protected mode. It uses a fixture version and transaction, records `demo_reset_audit`, invalidates the clean learner session, and returns an explicit completion result. `POST /api/v1/demo/session` bootstraps only the server-selected clean/history learner profiles and the Route Handler sets an HttpOnly cookie. Neither endpoint can reset arbitrary real accounts or issue a presenter/auditor identity. Seeded receipt/history UI carries `Dữ liệu demo` in audit and `Lịch sử · [date]` in student history where relevant.
 
 ## Demo-safe fallback
 
@@ -48,7 +50,7 @@ The golden path uses reviewed hints, reviewed pair content, deterministic scorin
 | AI contract | malformed JSON, timeout, provider error, unsafe output do not change authoritative score/state/evidence |
 | E2E golden scenario | browser performs the exact demo story and sees bridge, transfer isolation wording, receipt conditions, history/audit |
 
-The E2E test must use a deterministic local provider stub or disabled-AI path. A live provider is never required to pass core tests.
+The **deterministic-backend-core** E2E test may use a deterministic local provider stub or disabled-AI path; a live provider is never required to pass that core test. The separately frozen `competition-demo-v1.0` acceptance gate additionally requires a real-provider normal-path browser/runtime test and must not present a stub as live AI.
 
 ## Deployment boundary
 

@@ -1,9 +1,11 @@
 # Final architecture review
 
+> **Status: Completed historical verification of the v1.0 architecture freeze.** It remains evidence for the preserved backend core, not approval of v1.1 extensions.
+
 ## Red-team answers
 
-1. **Can complete demo operate without live LLM?** Yes. Fixed reviewed hints, reviewed transfer pairs, deterministic score, event store, receipt and reset are the golden path.
-2. **What disappears when AI is unavailable?** Only optional free-text feedback/phrasing or selection polish. The learner still receives approved hints and deterministic feedback; UI must say AI feedback is temporarily unavailable.
+1. **Can the deterministic backend core operate without live LLM?** Yes. Fixed reviewed hints, reviewed transfer pairs, deterministic score, event store, receipt and reset remain safe. The later frozen `competition-demo-v1.0` additionally requires a live bounded AI feedback normal path.
+2. **What disappears when AI is unavailable?** The live labelled reasoning-feedback layer. The learner still receives approved hints and deterministic feedback; UI must say AI feedback is temporarily unavailable. This is resilience behaviour, not the normal Competition Demo story.
 3. **Can client forge a receipt?** Not if server owns receipt eligibility, session relation, event append and unique receipt issuance. A browser can only render a returned receipt.
 4. **Can old hint/solution context leak into Thử vận dụng?** The contract prevents product leakage through a separate session/DTO/AI input/reveal gate. Tests must enforce this; it cannot prevent human memory.
 5. **Can historical evidence be distinguished from seeded demo data?** Yes: provenance is on events/receipts, with separate `demo-history` profile and student/audit labels.
@@ -23,7 +25,7 @@
 
 * Exact micro-skill, teacher-approved pairs, hint wording and scoring answer forms.
 * Chosen deployment host and actual secrets/identity for a live environment.
-* Whether optional live AI feedback is enabled for the competition demo; the deterministic path works either way.
+* Which provider/model/prompt version supplies the required bounded live AI feedback for the Competition Demo; deterministic fallback remains safe but cannot replace the normal path.
 These are content/operations decisions, not reasons to delay the architecture-defined backend core once fixture placeholders are accepted.
 
 ## Verdict

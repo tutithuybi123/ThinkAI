@@ -1,5 +1,7 @@
 # System overview and module boundaries
 
+> **Status: Active supporting v1.0 system foundation.** Its modular-monolith boundaries remain reusable. Current v1.1 AI/content/grading extensions are defined by [v1.1-amendment-contracts.md](v1.1-amendment-contracts.md), not by older one-pair or post-score-only assumptions.
+
 ## Boundary diagram
 
 ```mermaid

@@ -1,5 +1,7 @@
 # Architecture Decision Records (ADRs)
 
+> **Current navigation:** Start at [../CURRENT.md](../CURRENT.md). ADR-011 is current Competition Demo v1.1 authority and partially amends ADR-006/ADR-007 only where explicitly stated. ADR-001–010 remain active supporting decisions unless a newer ADR explicitly amends their scope.
+
 This directory contains Architecture Decision Records for **THINKAI KIDS**.
 
 ## What is an ADR?

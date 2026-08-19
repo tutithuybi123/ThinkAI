@@ -1,6 +1,7 @@
 # ADR-007: Use AI as an optional bounded adapter
 
-- **Status**: Accepted
+- **Status**: Accepted — partially amended by ADR-011 for the Practice Companion
+- **Current reader**: Read ADR-011 for the Practice-only bounded Companion. The preserved limits on policy authority, receipts, progression and Transfer remain active.
 - **Date**: 2026-08-14
 - **Author**: ThinkAI team (ratified by product owner)
 

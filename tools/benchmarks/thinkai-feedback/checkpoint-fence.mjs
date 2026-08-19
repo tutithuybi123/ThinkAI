@@ -1,0 +1,4 @@
+export const State=Object.freeze({PENDING:"PENDING",IN_FLIGHT:"IN_FLIGHT",COMPLETED:"COMPLETED",TERMINAL_FAILURE:"TERMINAL_FAILURE",UNKNOWN_AFTER_CRASH:"UNKNOWN_AFTER_CRASH"});
+export function recover(records){const last=new Map(); for(const r of records){if(!r?.runId||!Object.values(State).includes(r.state)) throw Error("checkpoint_corrupt_fail_closed"); if(r.state===State.COMPLETED&&(!r.resultRef||typeof r.resultRef!=="string"))throw Error("completed_result_missing_fail_closed"); last.set(r.runId,r);} return [...last.values()].map(r=>r.state===State.IN_FLIGHT?{...r,state:State.UNKNOWN_AFTER_CRASH}:r);}
+export function dispatchable(record){return record.state===State.PENDING;}
+export function completedRecord(runId,resultRef){if(typeof resultRef!=="string"||!resultRef)throw Error("result_reference_required");return {runId,state:State.COMPLETED,resultRef};}

@@ -1,5 +1,9 @@
 # THINKAI KIDS — System Architecture [DRAFT / PRE-FLIGHT DISCOVERY]
 
+> **Current Competition Demo context:** Read [CURRENT.md](CURRENT.md) before using this document.
+>
+> This is historical pre-flight discovery architecture. It must not override the current Competition Demo v1.1 source-of-truth or active supporting architecture references.
+
 > [!IMPORTANT]
 > **Status**: DRAFT / PRE-FLIGHT DISCOVERY.
 > All architectural components, data boundaries, tech stacks, and deployment targets are candidate proposals undergoing evaluation. Nothing in this document represents a final implementation commitment.

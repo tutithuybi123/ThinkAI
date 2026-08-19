@@ -1,5 +1,7 @@
 # Ratified architecture decisions
 
+> **Status: Active supporting v1.0 architecture decision summary.** Read ADR-011 and [v1.1-amendment-contracts.md](v1.1-amendment-contracts.md) for the current amended Competition Demo decisions.
+
 **Ratified:** 2026-08-14. AF-01 through AF-10 are accepted for the Competition MVP. Their canonical ADRs are [ADR-001](../../decisions/001-modular-monolith-stack.md) through [ADR-010](../../decisions/010-seeded-memory-return.md). This document remains the compact freeze index.
 
 | ID | Proposed decision | Why it fits MVP | Consequence / reversal cost |
@@ -10,7 +12,7 @@
 | AF-04 | Reviewed versioned content only for authoritative path | protects transfer validity and demo integrity | content authors need a review workflow/fixture validation |
 | AF-05 | Transfer gets a separate session/DTO/context boundary | makes isolation technically demonstrable | route/service boundary must be kept in tests |
 | AF-06 | Scoring is deterministic; AI cannot change score/receipt | demo remains reliable and claims traceable | constrains active content to objectively scoreable tasks |
-| AF-07 | Optional AI adapter only; reviewed hints always available | preserves meaningful AI role without making provider a demo blocker | live AI polish can arrive after core |
+| AF-07 | Optional AI adapter only; reviewed hints always available | preserves deterministic authority and safe provider-failure operation | optional to backend core; frozen `competition-demo-v1.0` requires live bounded feedback on its normal path, with reviewed fallback on failure |
 | AF-08 | Synthetic signed demo profiles, no OAuth | minimum privacy/scope/reliability | real accounts require later actor/auth adapter |
 | AF-09 | Task-oriented JSON API with idempotency | maps to product actions and protects double submits | avoid generic CRUD expansion |
 | AF-10 | `Ôn lại sau` is seeded historical only in MVP | prevents fake real-time retention/scheduling claim | real scheduler is future work |

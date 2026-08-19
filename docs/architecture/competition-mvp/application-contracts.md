@@ -1,5 +1,7 @@
 # Scoring, AI, API and frontend contracts
 
+> **Status: Active supporting v1.0 contract.** For current v1.1 Practice Companion, reviewed-rubric facets, grading aggregation and Transfer boundaries, [v1.1-amendment-contracts.md](v1.1-amendment-contracts.md) and ADR-011 override any conflicting statement here.
+
 ## Authoritative scoring
 
 `ScoringService.score(taskSnapshot, answer)` returns a normalized result; the service is pure and versioned.
@@ -38,7 +40,7 @@ All JSON endpoints require a valid actor session. Mutation endpoints accept `Ide
 | `GET /api/v1/skills` | active skill/path only | — |
 | `POST /api/v1/challenges/start` | select/start `ChallengeSession`; returns practice view model | `TASK_NOT_AVAILABLE`; `challenge_started` |
 | `GET /api/v1/challenges/{id}` | resumable practice projection; never returns transfer content | `SESSION_NOT_FOUND` |
-| `POST /api/v1/challenges/{id}/attempts` | `{ kind: 'text', value }` or `{ kind:'cannot_start' }` | `INVALID_TRANSITION`; attempt event |
+| `POST /api/v1/challenges/{id}/attempts` | `{ kind: 'attempt' }` or `{ kind:'cannot_start' }` | `INVALID_TRANSITION`; attempt event |
 | `POST /api/v1/challenges/{id}/interventions/{id}/open` | reviewed hint view model | `INTERVENTION_NOT_AVAILABLE`; exposure event |
 | `POST /api/v1/challenges/{id}/submissions` | response + authoritative practice score + next action | `SUBMISSION_INVALID`, `SCORING_FAILED`; submit/score events |
 | `POST /api/v1/challenges/{id}/transfer/start` | isolated `TransferSession`, transfer view model | `TRANSFER_NOT_ELIGIBLE`; `transfer_started` |
@@ -48,7 +50,8 @@ All JSON endpoints require a valid actor session. Mutation endpoints accept `Ide
 | `GET /api/v1/receipts/{id}` | receipt view/detail | `RECEIPT_NOT_FOUND` |
 | `GET /api/v1/progress` | path + learner-language history | — |
 | `GET /api/v1/audit/receipts/{id}` | restricted provenance detail | `FORBIDDEN`, `AUDIT_NOT_FOUND` |
-| `POST /api/v1/demo/reset` | presenter-only reset receipt + new session cookie/token | `DEMO_RESET_FORBIDDEN`, `DEMO_STATE_CONFLICT`; reset audit event |
+| `POST /api/v1/demo/reset` | presenter-only reset receipt; invalidates the clean learner session | `DEMO_RESET_FORBIDDEN`, `DEMO_STATE_CONFLICT`; reset audit record |
+| `POST /api/v1/demo/session` | server-controlled synthetic learner bootstrap; Route Handler sets an HttpOnly session cookie | `INVALID_DEMO_PROFILE` |
 | `GET /healthz` | dependency-safe service status | no learner data |
 
 ### Submission example
@@ -57,10 +60,11 @@ All JSON endpoints require a valid actor session. Mutation endpoints accept `Ide
 POST /api/v1/challenges/ch_demo_001/submissions
 {
   "answer": "2",
-  "reasoning": "Em tính độ thay đổi của y trên x.",
-  "clientRequestId": "a-4f9"
+  "reasoning": "Em tính độ thay đổi của y trên x."
 }
 ```
+
+The mutation idempotency value is the required `Idempotency-Key` HTTP header; `clientRequestId` is not part of the frozen API contract.
 
 ```json
 {

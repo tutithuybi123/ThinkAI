@@ -1,6 +1,8 @@
 # ThinkAI Competition MVP — Architecture Freeze
 
-**Status:** approved architecture freeze; implementation has not begun.
+> **Current v1.1 amendment:** Read [v1.1-amendment-contracts.md](v1.1-amendment-contracts.md) and [../../CURRENT.md](../../CURRENT.md) first. This architecture freeze remains active supporting reference for the implemented v1.0 backend core; where it conflicts with explicit v1.1 contracts, v1.1 governs current Competition Demo work.
+
+**Status:** approved architecture freeze; Packages A–I backend core is implemented and runtime-reviewed. Frontend, live AI product layer and reviewed educational content remain outside the completed backend core.
 **Ratified:** 2026-08-14.
 **Scope:** one Grade-10 mathematics micro-skill and the approved student flow only.
 **Primary rule:** deterministic core + bounded AI.
@@ -17,14 +19,14 @@ Trang chủ → Bài luyện → attempt / Xem gợi ý → solve
 
 The backend owns content selection, scoring, evidence, receipt eligibility and state transitions. The frontend renders the Vietnamese product experience specified in [the UI handoff](../../design/competition-ui/README.md).
 
-## Repository fact and technology proposal
+## Repository fact and ratified technology proposal
 
-The repository has no application stack at this point. `.env.example` contains a Next-style app URL and PostgreSQL placeholder, but neither is an implementation. This package therefore defines the ratified MVP architecture:
+At ratification, this package selected the implementation shape. The current repository now contains the resulting TypeScript/Next modular monolith, PostgreSQL migrations, task-oriented API and Packages A–I backend core; see `docs/product-scope/current-implementation-inventory.md` for the current state. The ratified architecture is:
 
 * **TypeScript modular monolith:** Next.js frontend plus server route handlers in one repository/deployment unit.
-* **Canonical store:** PostgreSQL, using migrations and a typed query/ORM layer selected during implementation. SQLite may be used for isolated local tests only, never as the assumed deployed source of truth.
+* **Canonical store:** PostgreSQL, using migrations and the explicit typed `pg` adapter in `src/persistence/pg-driver.ts`. SQLite may be used for isolated local tests only, never as the assumed deployed source of truth.
 * **API style:** task-oriented JSON HTTP endpoints, not generic CRUD.
-* **AI:** an optional server-side adapter, unavailable by default without configured credentials.
+* **AI:** optional to the deterministic backend core, which stays safe when a provider is unavailable. Under the frozen `competition-demo-v1.0` scope, a configured live bounded `reasoningFeedback` call is mandatory on the normal Demo path; `AI_UNAVAILABLE` is only an explicitly labelled resilience fallback.
 
 No microservices, vector database, RAG, model training, global knowledge graph or LMS belong here.
 
@@ -48,4 +50,4 @@ No microservices, vector database, RAG, model training, global knowledge graph o
 * The `Thử vận dụng` session cannot receive the prior solution, hint body or LLM conversation context.
 * A Capability Receipt is server-derived from events; a client cannot create or alter one.
 * Historical/seeding provenance is visible and queryable.
-* A complete demo path works with AI unavailable.
+* The deterministic backend core works with AI unavailable; the frozen Competition Demo must additionally exercise its live bounded AI normal path and separately test the labelled unavailable fallback.

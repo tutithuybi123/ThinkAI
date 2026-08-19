@@ -1,5 +1,9 @@
 # THINKAI KIDS — Product Specification [DRAFT / PRE-FLIGHT DISCOVERY]
 
+> **Current Competition Demo context:** Read [CURRENT.md](CURRENT.md) before using this document.
+>
+> This is historical pre-flight discovery context. It must not override the current Competition Demo v1.1 source-of-truth.
+
 > [!IMPORTANT]
 > **Status**: DRAFT / PRE-FLIGHT DISCOVERY.
 > Product scope, target features, and UI flows are currently candidate proposals undergoing evaluation. Nothing in this document represents a final implementation commitment.

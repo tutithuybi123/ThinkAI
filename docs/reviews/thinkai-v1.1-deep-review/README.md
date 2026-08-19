@@ -1,5 +1,9 @@
 # ThinkAI v1.1 deep red-team review
 
+> **Status: Completed historical review of the v1.1 proposal.**
+>
+> This review remains historical evidence and may inform risk analysis. It does not override the current Competition Demo v1.1 source-of-truth; see [../../CURRENT.md](../../CURRENT.md).
+
 **Scope.** Diagnosis of `docs/proposals/ThinkAI-Idea-Team-Review-v1.1.md` and `.docx` only. The proposal files were not changed. This review uses `[FACT]` for a source-backed observation, `[INFERENCE]` for a conclusion, and `[HYPOTHESIS]` for an untested product claim.
 
 **Verdict:** **VALIDATE — DISTINCTIVE CORE EXISTS, BUT NEEDS EVIDENCE**. The candidate core is not a better tutor. It is a bounded evidence protocol: record the conditions of assisted success, require a pre-authored independent near-transfer task, and preserve subsequent contradictory or delayed evidence. Today this is a promising research/product contract, not a demonstrated product advantage or moat.

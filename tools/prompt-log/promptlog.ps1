@@ -48,6 +48,17 @@ function Get-NextPromptIdLocked {
     }
     return ("P{0:D6}" -f ($max + 1))
 }
+function Find-ExistingSessionStartLocked([object]$Record) {
+    if ($Record.capture_status -ne "session_start" -or [string]::IsNullOrWhiteSpace([string]$Record.source_session_id)) { return $null }
+    foreach ($file in Get-ChildItem -Path $SessionsDir -Filter "*.jsonl" -ErrorAction SilentlyContinue) {
+        foreach ($line in [IO.File]::ReadAllLines($file.FullName, [Text.UTF8Encoding]::new($false))) {
+            if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            try { $existing = $line | ConvertFrom-Json } catch { continue }
+            if ($existing.capture_status -eq "session_start" -and $existing.source_session_id -eq $Record.source_session_id) { return $existing.prompt_id }
+        }
+    }
+    return $null
+}
 function Write-JsonLineLocked([string]$FilePath, [object]$Record) {
     $line = $Record | ConvertTo-Json -Compress -Depth 8
     $utf8 = [Text.UTF8Encoding]::new($false)
@@ -86,6 +97,8 @@ Invoke-WithLogLock {
             $record | Add-Member -NotePropertyName prompt_id -NotePropertyValue (Get-NextPromptIdLocked) -Force
             if (-not $record.PSObject.Properties["timestamp"] -or -not $record.timestamp) { $record | Add-Member -NotePropertyName timestamp -NotePropertyValue ((Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")) -Force }
             if (-not $record.PSObject.Properties["schema_version"]) { $record | Add-Member -NotePropertyName schema_version -NotePropertyValue 1 }
+            $existingSessionStart = Find-ExistingSessionStartLocked $record
+            if ($existingSessionStart) { Write-Output $existingSessionStart; break }
             $target = Get-SessionFileLocked
             Write-JsonLineLocked $target $record
             Write-Output $record.prompt_id
