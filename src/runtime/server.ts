@@ -40,6 +40,7 @@ export interface ProductionRuntime {
   readonly receipts: CapabilityReceiptService;
   readonly demo: PostgresDemoService;
   readonly contentRevisions: PostgresContentRevisionRepository;
+  startPublishedPractice(actor:ActorId,revisionId:string):Promise<unknown>;
   readonly sessionBootstrap: {
     issueLearner(profile: "clean" | "history"): Promise<{ token: string; actorId: ActorId; role: "learner" }>;
     issueStaff(input: { readonly role: "presenter" | "auditor"; readonly secret: string }): Promise<{ token: string; actorId: ActorId; role: "presenter" | "auditor" }>;
@@ -91,6 +92,7 @@ export async function createProductionRuntime(config: RuntimeConfiguration): Pro
     receipts,
     demo,
     contentRevisions,
+    async startPublishedPractice(actor:ActorId,revisionId:string){const pair=await contentRevisions.selectInitialPublishedPair(actor,revisionId as never);return Object.freeze({microSkillRevisionId:revisionId,pairId:pair.id,pairVersion:pair.version,practiceTaskId:pair.practiceTask.id,practiceTaskVersion:pair.practiceTask.version});},
     sessionBootstrap: {
       async issueLearner(profile: "clean" | "history"): Promise<{ token: string; actorId: ActorId; role: "learner" }> {
         const actor = profile === "clean" ? config.cleanDemoActorId : config.historyDemoActorId;
