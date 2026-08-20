@@ -1,0 +1,6 @@
+import type { RubricFacetEvaluation } from "../grading/contracts.js";
+import { validateRubricFacetEvaluation } from "../grading/rubric-validation.js";
+import type { ReviewedRubricGradingShape } from "../content/rubric.js";
+export interface RubricEvaluatorAdapter { evaluate(input:{readonly taskVersion:string;readonly rubricVersion:string;readonly rawText:string}):Promise<unknown>; }
+export interface EvaluatorEvidence { readonly status:"valid"|"unavailable"|"invalid"; readonly facets?:RubricFacetEvaluation; readonly provenance:{readonly adapterId:string;readonly modelVersion:string;readonly schemaVersion:string}; }
+export async function evaluateReviewedRubric(adapter:RubricEvaluatorAdapter,input:{taskVersion:string;rubricVersion:string;rawText:string;shape:ReviewedRubricGradingShape;criterionIds:readonly string[];provenance:EvaluatorEvidence["provenance"]}):Promise<EvaluatorEvidence>{try{const value=await adapter.evaluate(input);const issues=validateRubricFacetEvaluation(value,input.shape,input.criterionIds);return issues.length?{status:"invalid",provenance:input.provenance}:{status:"valid",facets:value as RubricFacetEvaluation,provenance:input.provenance};}catch{return{status:"unavailable",provenance:input.provenance};}}
