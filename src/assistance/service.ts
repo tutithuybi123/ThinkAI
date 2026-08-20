@@ -17,9 +17,9 @@ export class AssistancePolicyError extends Error {
 
 /** Creates the normalized evidence payload only after the server selected a permitted support level. */
 export function recordAssistance(input: RecordAssistanceInput): AssistanceRecord {
-  if (input.answerRevealed === true) throw new AssistancePolicyError("Practice assistance must never reveal the final answer.");
+  if (input.answerRevealed || (input.responseBlocked && input.answerRevealed)) throw new AssistancePolicyError("Practice assistance must never deliver a final answer.");
   if (!input.messageId.trim() || !input.occurredAt.trim()) throw new AssistancePolicyError("Assistance evidence requires a message ID and server timestamp.");
-  return Object.freeze({ supportLevel: input.supportLevel, messageId: input.messageId, occurredAt: input.occurredAt, answerRevealed: false });
+  return Object.freeze({ ...input });
 }
 
 /** A neutral factual summary for evidence/feedback; it is not a learner penalty or score. */
@@ -28,5 +28,5 @@ export function summarizeAssistance(records: readonly AssistanceRecord[]): Assis
     (highest, record) => ranks[record.supportLevel] > ranks[highest] ? record.supportLevel : highest,
     "NONE",
   );
-  return Object.freeze({ aiUsed: records.length > 0, interactionCount: records.length, highestSupportLevel, answerRevealed: false });
+  return Object.freeze({ aiUsed: records.length > 0, interactionCount: records.length, highestSupportLevel, answerRevealed: records.some(x=>x.answerRevealed) });
 }

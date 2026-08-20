@@ -5,20 +5,23 @@ export interface AssistanceRecord {
   readonly supportLevel: Exclude<AssistanceLevel, "NONE">;
   readonly messageId: string;
   readonly occurredAt: string;
-  readonly answerRevealed: false;
+  readonly answerRevealAttempted: boolean;
+  readonly answerRevealed: boolean;
+  readonly responseBlocked: boolean;
 }
 
 export interface AssistanceSummary {
   readonly aiUsed: boolean;
   readonly interactionCount: number;
   readonly highestSupportLevel: AssistanceLevel;
-  readonly answerRevealed: false;
+  readonly answerRevealed: boolean;
 }
 
 export interface RecordAssistanceInput {
   readonly supportLevel: Exclude<AssistanceLevel, "NONE">;
   readonly messageId: string;
   readonly occurredAt: string;
-  /** Present only at a server boundary; true is always invalid. */
-  readonly answerRevealed?: boolean;
+  readonly answerRevealAttempted: boolean;
+  readonly answerRevealed: boolean;
+  readonly responseBlocked: boolean;
 }

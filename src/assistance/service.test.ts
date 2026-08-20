@@ -13,9 +13,9 @@ test("summarizes no assistance without treating it as a score", () => {
 
 test("keeps the strongest observed assistance level and interaction count", () => {
   const records = [
-    recordAssistance({ supportLevel: "CONCEPTUAL_HINT", messageId: "m1", occurredAt: "2026-08-19T00:00:00.000Z" }),
-    recordAssistance({ supportLevel: "STRATEGIC_HINT", messageId: "m2", occurredAt: "2026-08-19T00:00:01.000Z" }),
-    recordAssistance({ supportLevel: "STRONG_SCAFFOLD", messageId: "m3", occurredAt: "2026-08-19T00:00:02.000Z" }),
+    recordAssistance({ supportLevel: "CONCEPTUAL_HINT", messageId: "m1", occurredAt: "2026-08-19T00:00:00.000Z",answerRevealAttempted:false,answerRevealed:false,responseBlocked:false }),
+    recordAssistance({ supportLevel: "STRATEGIC_HINT", messageId: "m2", occurredAt: "2026-08-19T00:00:01.000Z",answerRevealAttempted:false,answerRevealed:false,responseBlocked:false }),
+    recordAssistance({ supportLevel: "STRONG_SCAFFOLD", messageId: "m3", occurredAt: "2026-08-19T00:00:02.000Z",answerRevealAttempted:false,answerRevealed:false,responseBlocked:false }),
   ];
   const summary = summarizeAssistance(records);
   assert.equal(summary.aiUsed, true);
@@ -26,7 +26,7 @@ test("keeps the strongest observed assistance level and interaction count", () =
 
 test("rejects any record claiming that the companion revealed an answer", () => {
   assert.throws(
-    () => recordAssistance({ supportLevel: "PROMPT", messageId: "m1", occurredAt: "2026-08-19T00:00:00.000Z", answerRevealed: true }),
+    () => recordAssistance({ supportLevel: "PROMPT", messageId: "m1", occurredAt: "2026-08-19T00:00:00.000Z",answerRevealAttempted:true, answerRevealed: true,responseBlocked:false }),
     AssistancePolicyError,
   );
 });
