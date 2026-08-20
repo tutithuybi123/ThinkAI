@@ -13,6 +13,7 @@ const rubric = (overrides: Partial<RubricEvaluation> = {}): RubricEvaluation => 
   outcome: "CORRECT",
   finalAnswer: "correct",
   reasoning: "correct",
+  criteria: [],
   errors: [],
   confidence: "high",
   evaluatorVersion: "rubric-v1",
