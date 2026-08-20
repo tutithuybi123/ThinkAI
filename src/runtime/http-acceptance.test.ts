@@ -144,7 +144,7 @@ acceptance("actual Next HTTP runtime accepts the explicitly test-only structural
     const first = await runGoldenFlow(server, "first");
     const runtimeDatabase = NodePostgresClient.fromConnectionString(runtimeUrl);
     try {
-      const migrations = await runtimeDatabase.query<{ count: string }>("SELECT count(*) FROM schema_migrations"); assert.equal(Number(migrations.rows[0]?.count), 6, "runtime must apply every real migration");
+      const migrations = await runtimeDatabase.query<{ count: string }>("SELECT count(*) FROM schema_migrations"); assert.equal(Number(migrations.rows[0]?.count), 7, "runtime must apply every real migration");
       await stopRuntime(server); server = await startRuntime(environment);
       expectStatus(await request(server.origin, "GET", `/api/v1/challenges/${first.challengeId}`, { cookie: first.cleanCookie }), 200);
       assert.equal((await request(server.origin, "GET", "/api/v1/home", { cookie: `${first.cleanCookie}x` })).status, 401, "tampered signed cookie must be rejected");
