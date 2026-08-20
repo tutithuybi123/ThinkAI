@@ -30,9 +30,7 @@ export function aggregateGrading(input: AggregateGradingInput): GradingResult {
 
   const finalAnswer = rubric.finalAnswer === "unknown" ? deterministicFinal : rubric.finalAnswer;
   const reasoning: ReasoningAssessment = rubric.reasoning;
-  const outcome = rubric.outcome === "UNCERTAIN"
-    ? "UNCERTAIN"
-    : finalAnswer === "correct" && reasoning === "correct"
+  const outcome = finalAnswer === "correct" && reasoning === "correct"
       ? "CORRECT"
       : finalAnswer === "incorrect" && reasoning === "incorrect"
         ? "INCORRECT"
