@@ -1,0 +1,4 @@
+import type { AssistanceRecord } from "./contracts.js";
+import type { EvidenceEvent } from "../evidence/schema.js";
+import type { ActorId, ChallengeSessionId, EvidenceEventId, SkillId, TaskFamilyId, TaskId } from "../domain/ids.js";
+export function assistanceEvidence(input:{id:EvidenceEventId;actorId:ActorId;challengeSessionId:ChallengeSessionId;skillId:SkillId;taskId:TaskId;taskVersion:string;taskFamilyId:TaskFamilyId;record:AssistanceRecord;guidanceVersion:string;occurredAt:string}):EvidenceEvent { return {id:input.id,type:"practice_assistance_recorded",actorId:input.actorId,correlationId:input.challengeSessionId,challengeSessionId:input.challengeSessionId,skillId:input.skillId,taskId:input.taskId,taskVersion:input.taskVersion,taskFamilyId:input.taskFamilyId,occurredAt:input.occurredAt,schemaVersion:1,policyVersion:"assistance-v1",provenance:"live",payload:{...input.record,guidanceVersion:input.guidanceVersion}}; }
