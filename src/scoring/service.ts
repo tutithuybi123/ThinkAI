@@ -19,6 +19,7 @@ export interface ScoreResult {
   readonly normalizedAnswer?: string;
   readonly reasonCode?: ScoreReasonCode;
 }
+export interface DeterministicEvaluation { readonly applicability:"applicable"|"not_applicable"; readonly score?:ScoreResult; }
 
 export type ScorableTaskSnapshot = Pick<TaskContent, "answerSpec">;
 
@@ -168,5 +169,6 @@ export class DeterministicScoringService implements ScoringService {
     }
   }
 }
+export function evaluateDeterministic(taskSnapshot:ScorableTaskSnapshot,answer:unknown,service:ScoringService=new DeterministicScoringService()):DeterministicEvaluation { const kind=taskSnapshot.answerSpec.kind; if(kind==="written_solution"||kind==="expression") return {applicability:"not_applicable"}; return {applicability:"applicable",score:service.score(taskSnapshot,answer)}; }
 
 export const scoringService: ScoringService = new DeterministicScoringService();
