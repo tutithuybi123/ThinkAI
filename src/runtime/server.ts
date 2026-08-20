@@ -1,10 +1,11 @@
 import { readFile } from "node:fs/promises";
 import { timingSafeEqual } from "node:crypto";
 import { createHash } from "node:crypto";
+import { randomUUID } from "node:crypto";
 
 import { PostgresSyntheticSessionRegistry, SignedSessionService, type SessionAuthenticator } from "../auth/session.js";
 import { ReviewedContentRepository } from "../content/repository.js";
-import { actorId, type ActorId } from "../domain/ids.js";
+import { actorId, challengeSessionId, type ActorId } from "../domain/ids.js";
 import { rebuildHistory, rebuildLearnerProgress, CapabilityReceiptService } from "../receipts/service.js";
 import { DeterministicScoringService } from "../scoring/service.js";
 import { PracticeChallengeService } from "../challenge/service.js";
@@ -92,7 +93,7 @@ export async function createProductionRuntime(config: RuntimeConfiguration): Pro
     receipts,
     demo,
     contentRevisions,
-    async startPublishedPractice(actor:ActorId,revisionId:string){const pair=await contentRevisions.selectInitialPublishedPair(actor,revisionId as never);return Object.freeze({microSkillRevisionId:revisionId,pairId:pair.id,pairVersion:pair.version,practiceTaskId:pair.practiceTask.id,practiceTaskVersion:pair.practiceTask.version});},
+    async startPublishedPractice(actor:ActorId,revisionId:string){const pair=await contentRevisions.selectInitialPublishedPair(actor,revisionId as never);const legacyPair=content.getReviewedPair(pair.id as never);if(legacyPair.version!==pair.version||legacyPair.practiceTaskId!==pair.practiceTask.id||legacyPair.transferTaskId!==pair.transferTask.id)throw Object.assign(new Error("Published content cannot be resolved by the Practice runtime."),{code:"CONTENT_INTEGRITY_FAILED"});const sessionId=challengeSessionId(`challenge_${randomUUID().replaceAll("-","")}`);const started=await (new PracticeChallengeService(content,persistence,scoring)).start({sessionId,actorId:actor,pairId:pair.id,idempotencyKey:`published:${revisionId}:${sessionId}`});return Object.freeze({sessionId:started.challenge.sessionId,microSkillRevisionId:revisionId,pairId:pair.id,pairVersion:pair.version,practiceTaskId:pair.practiceTask.id,practiceTaskVersion:pair.practiceTask.version});},
     sessionBootstrap: {
       async issueLearner(profile: "clean" | "history"): Promise<{ token: string; actorId: ActorId; role: "learner" }> {
         const actor = profile === "clean" ? config.cleanDemoActorId : config.historyDemoActorId;
