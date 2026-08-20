@@ -18,6 +18,8 @@ import { EVIDENCE_EVENT_SCHEMA_VERSION } from "../domain/policies.js";
 import type { EvidenceEvent } from "../evidence/schema.js";
 import type { AppendEvidenceCommand, AppendEvidenceResult, SessionSnapshot } from "../persistence/index.js";
 import type { ScoreResult, ScoringService, SubmittedAnswer } from "../scoring/service.js";
+import { deterministicOutcome } from "../grading/aggregation.js";
+import { satisfiesGradingGate } from "../grading/gate-policy.js";
 
 const PRACTICE_LIFECYCLE_POLICY_VERSION = "practice-lifecycle-v1";
 const SESSION_STATE_VERSION = 1;
@@ -344,7 +346,8 @@ export class PracticeChallengeService {
       throw new PracticeChallengeError("INVALID_TRANSITION", "A practice answer can be submitted only after an attempt or reviewed hint.");
     }
     const score = this.scoring.score(loaded.task, command.answer);
-    const stage: PracticeChallengeStage = score.outcome === "correct" ? "solved" : loaded.state.exposures.length > 0 ? "assisted" : "attempting";
+    const gradingOutcome = deterministicOutcome(score);
+    const stage: PracticeChallengeStage = satisfiesGradingGate(gradingOutcome) ? "solved" : loaded.state.exposures.length > 0 ? "assisted" : "attempting";
     const base: ChallengeState = Object.freeze({
       ...loaded.state,
       stage,
