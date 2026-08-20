@@ -14,6 +14,7 @@ import { PostgresTransactionalEvidencePersistence } from "../persistence/index.j
 import { PostgresDemoService } from "../demo/service.js";
 import type { DemoFixtureSeed } from "../demo/service.js";
 import { runMigrations } from "../persistence/migrations.js";
+import { PostgresContentRevisionRepository } from "../content/postgres-repository.js";
 
 export interface RuntimeConfiguration {
   readonly databaseUrl: string;
@@ -38,6 +39,7 @@ export interface ProductionRuntime {
   readonly transfer: TransferService;
   readonly receipts: CapabilityReceiptService;
   readonly demo: PostgresDemoService;
+  readonly contentRevisions: PostgresContentRevisionRepository;
   readonly sessionBootstrap: {
     issueLearner(profile: "clean" | "history"): Promise<{ token: string; actorId: ActorId; role: "learner" }>;
     issueStaff(input: { readonly role: "presenter" | "auditor"; readonly secret: string }): Promise<{ token: string; actorId: ActorId; role: "presenter" | "auditor" }>;
@@ -69,6 +71,7 @@ export async function createProductionRuntime(config: RuntimeConfiguration): Pro
   const client = NodePostgresClient.fromConnectionString(config.databaseUrl);
   await runMigrations(client);
   const persistence = new PostgresTransactionalEvidencePersistence(client);
+  const contentRevisions = new PostgresContentRevisionRepository(client);
   const scoring = new DeterministicScoringService();
   const signer = new SignedSessionService(config.sessionSecret);
   const auth = new PostgresSyntheticSessionRegistry(signer, client, [
@@ -87,6 +90,7 @@ export async function createProductionRuntime(config: RuntimeConfiguration): Pro
     transfer: new TransferService(content, persistence, scoring),
     receipts,
     demo,
+    contentRevisions,
     sessionBootstrap: {
       async issueLearner(profile: "clean" | "history"): Promise<{ token: string; actorId: ActorId; role: "learner" }> {
         const actor = profile === "clean" ? config.cleanDemoActorId : config.historyDemoActorId;
@@ -100,6 +104,9 @@ export async function createProductionRuntime(config: RuntimeConfiguration): Pro
     },
     async home(actor: ActorId) { return { actorId: actor, progress: rebuildLearnerProgress(await persistence.list(actor)) }; },
     async skills(_actor: ActorId) {
+      const published = await contentRevisions.listPublishedHierarchy();
+      if (published.length) return { active: published.flatMap((revision) => revision.body.microSkills.map((node) => ({ microSkillId: node.microSkill.id, microSkillRevisionId: node.microSkill.revisionId, displayOrder: node.microSkill.displayOrder }))), locked: [] };
+      if (!config.allowStructuralTestContent) throw Object.assign(new Error("No published content revision is available."), { code: "CONTENT_INTEGRITY_FAILED" });
       const pair = content.selectApprovedPair();
       return { active: [{ skillId: pair.skillId, pairId: pair.id, pairVersion: pair.version }], locked: [] };
     },
