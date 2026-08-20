@@ -12,6 +12,7 @@ export interface ApiServices {
   progress(actor: ActorId): Promise<unknown>;
   audit(actor: ActorId, receiptId: string): Promise<unknown>;
   readonly practice: any; readonly transfer: any; readonly receipts: any;
+  readonly ops?: { get(id:string):Promise<unknown>; submitReview(id:string):Promise<unknown>; approve(id:string):Promise<unknown>; publish(id:string):Promise<unknown>; deprecate(id:string):Promise<unknown>; };
   readonly demo?: { reset(input:{resetBy:ActorId;idempotencyKey:string}): unknown | Promise<unknown>; health(): unknown | Promise<unknown> };
   readonly sessionBootstrap?: {
     issueLearner(profile: "clean" | "history"): { token: string; actorId: ActorId; role: "learner" } | Promise<{ token: string; actorId: ActorId; role: "learner" }>;
@@ -95,6 +96,13 @@ export async function dispatch(services: ApiServices, request: ApiRequest): Prom
     if (request.method === "GET" && request.path === "/api/v1/home") return response(200, await services.home(actor.actorId));
     if (request.method === "GET" && request.path === "/api/v1/skills") return response(200, await services.skills(actor.actorId));
     if (request.method === "GET" && request.path === "/api/v1/progress") return response(200, await services.progress(actor.actorId));
+    if (parts[2] === "ops") {
+      if (actor.role !== "presenter" && actor.role !== "auditor") return failure("FORBIDDEN",403,"Content operations require staff authorization.");
+      if (!services.ops) return failure("NOT_FOUND",404,"Content operations are unavailable.");
+      if (request.method === "GET" && parts[3] === "revisions" && routeId(parts[4])) return response(200,await services.ops.get(parts[4]!));
+      if (request.method !== "POST" || !body || !routeId(String(body.revisionId ?? ""))) return failure("INVALID_REQUEST",400,"A revision ID is required.");
+      const id=String(body.revisionId); if(parts[3]==="review")return response(200,await services.ops.submitReview(id)); if(parts[3]==="approve")return response(200,await services.ops.approve(id));if(parts[3]==="publish")return response(200,await services.ops.publish(id));if(parts[3]==="deprecate")return response(200,await services.ops.deprecate(id));
+    }
     if (request.method === "GET" && parts[2] === "challenges" && routeId(parts[3])) return response(200, await services.practice.resume(parts[3], actor.actorId));
     if (request.method === "GET" && parts[2] === "transfers" && routeId(parts[3])) return response(200, await services.transfer.resume(parts[3], actor.actorId));
     if (request.method === "GET" && parts[2] === "receipts" && routeId(parts[3])) return response(200, await services.receipts.get({ id: parts[3], actorId: actor.actorId }));
