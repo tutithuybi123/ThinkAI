@@ -1,0 +1,2 @@
+import {test,expect} from "@playwright/test";
+test("learner UI does not render Transfer data before a server session exists",async({page})=>{const errors:string[]=[];page.on("console",m=>{if(m.type()==="error")errors.push(m.text())});await page.goto("/");await expect(page.getByRole("heading",{name:"ThinkAI"})).toBeVisible();await expect(page.getByText("Independent Transfer")).toHaveCount(0);expect(errors).toEqual([]);});
