@@ -7,3 +7,8 @@ CREATE TABLE content_revisions (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX content_revisions_published_idx ON content_revisions (lifecycle, revision_id);
+CREATE TABLE published_micro_skills (
+  micro_skill_id TEXT PRIMARY KEY,
+  revision_id TEXT NOT NULL UNIQUE REFERENCES content_revisions(revision_id),
+  published_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
