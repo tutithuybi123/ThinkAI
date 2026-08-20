@@ -163,6 +163,8 @@ export class DeterministicScoringService implements ScoringService {
       case "numeric": return scoreNumeric(spec, answer);
       // A symbolic adapter must be explicitly reviewed and deterministic. None is installed for MVP.
       case "expression": return invalid(spec.normalizationVersion);
+      // Written solutions are deliberately deferred to the reviewed-rubric route.
+      case "written_solution": return invalid("written-solution-rubric-pending");
     }
   }
 }

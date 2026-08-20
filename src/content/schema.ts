@@ -5,6 +5,8 @@ import type {
   TaskId,
   TaskPairId,
 } from "../domain/ids.js";
+import type { ReviewedAssessment } from "./rubric.js";
+import type { ContentAggregate } from "./v11-validator.js";
 
 export const REVIEW_STATUSES = ["draft", "approved", "withdrawn"] as const;
 export type ReviewStatus = (typeof REVIEW_STATUSES)[number];
@@ -45,11 +47,12 @@ export interface TaskFamilyContent {
   review: ReviewRecord;
 }
 
-export type AnswerSpec =
+export type DeterministicAnswerSpec =
   | { kind: "exact_text"; accepted: readonly string[]; normalizationVersion: string }
   | { kind: "numeric"; expected: string; tolerance?: string; normalizationVersion: string }
   | { kind: "expression"; expected: string; equivalencePolicy: "symbolic"; normalizationVersion: string }
   | { kind: "choice"; acceptedOptionIds: readonly string[]; normalizationVersion: string };
+export type AnswerSpec = DeterministicAnswerSpec | { kind: "written_solution"; deterministicFinal?: DeterministicAnswerSpec; assessment: ReviewedAssessment };
 
 export interface TaskContent {
   id: TaskId;
@@ -103,4 +106,6 @@ export interface ContentBundle {
   tasks: readonly TaskContent[];
   taskPairs: readonly ReviewedTaskPair[];
   interventions: readonly InterventionContent[];
+  /** Optional v1.1 aggregate extension; omitted by frozen v1.0 bundles. */
+  contentAggregate?: ContentAggregate;
 }
