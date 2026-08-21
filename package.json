@@ -8,12 +8,14 @@
     "check": "tsc --noEmit",
     "test": "tsx --test",
     "test:package-a": "tsx --test",
-    "test:runtime": "tsx --test src/runtime/http-acceptance.test.ts"
+    "test:runtime": "tsx --test src/runtime/http-acceptance.test.ts",
+    "test:e2e": "playwright test"
   },
   "engines": {
     "node": ">=24.0.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@types/node": "^26.2.0",
     "@types/react": "19.2.18",
     "tsx": "^4.23.12",

@@ -3,7 +3,7 @@ import test from "node:test";
 
 import type { AnswerSpec } from "../content/schema.js";
 import { SCORING_POLICY_VERSION } from "../domain/policies.js";
-import { DeterministicScoringService } from "./service.js";
+import { DeterministicScoringService, evaluateDeterministic } from "./service.js";
 
 const service = new DeterministicScoringService();
 const score = (answerSpec: AnswerSpec, answer: Parameters<typeof service.score>[1]) => service.score({ answerSpec }, answer);
@@ -45,3 +45,10 @@ test("rejects malformed answers and unsupported expression specs deterministical
   });
   assert.equal(score(numeric, null).outcome, "invalid");
 });
+
+test("leaves written solutions for the later reviewed-rubric route", () => {
+  const written: AnswerSpec = { kind: "written_solution", assessment: { expectedResult: "2", gradingShape: { finalAnswerFacet: "required", reasoningFacet: "required", requiredCriterionIds: [], optionalCriterionIds: [] }, criteria: [], referenceSolutions: [{ format: "plain_text", body: "Any valid method." }], commonMisconceptions: [], aiGuidance: { version: "g1", allowedSupportLevels: ["PROMPT"] } } };
+  assert.equal(score(written, { kind: "written_solution", rawText: "I used two points." } as never).outcome, "invalid");
+});
+
+test("routes written and unsupported symbolic tasks as not applicable rather than deterministic failure",()=>{const written:AnswerSpec={kind:"written_solution",assessment:{expectedResult:"2",gradingShape:{finalAnswerFacet:"required",reasoningFacet:"required",requiredCriterionIds:[],optionalCriterionIds:[]},criteria:[],referenceSolutions:[{format:"plain_text",body:"x"}],commonMisconceptions:[],aiGuidance:{version:"v",allowedSupportLevels:["PROMPT"]}}};assert.deepEqual(evaluateDeterministic({answerSpec:written},{kind:"written_solution",rawText:"x"}),{applicability:"not_applicable"});});

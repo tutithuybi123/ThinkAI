@@ -1,5 +1,7 @@
 import { CONTENT_CONTRACT_VERSION } from "../domain/policies.js";
 import { CHANGE_DIMENSIONS, EXPOSURE_TAGS, REVIEW_STATUSES, type ContentBundle } from "./schema.js";
+import { validateReviewedAssessment } from "./rubric.js";
+import { validateContentAggregate } from "./v11-validator.js";
 
 export interface ContentValidationIssue {
   path: string;
@@ -74,6 +76,11 @@ function validateAnswerSpec(
     case "choice":
       if (!Array.isArray(answerSpec.acceptedOptionIds) || answerSpec.acceptedOptionIds.length === 0 || hasDuplicates(answerSpec.acceptedOptionIds)) {
         issues.push({ path, code: "INVALID_ANSWER_SPEC", message: "one or more unique accepted option IDs are required" });
+      }
+      break;
+    case "written_solution":
+      if (!answerSpec.assessment || validateReviewedAssessment(answerSpec.assessment).length) {
+        issues.push({ path, code: "INVALID_ANSWER_SPEC", message: "written solutions require a valid reviewed assessment" });
       }
       break;
     default:
@@ -176,5 +183,6 @@ export function validateContentBundle(bundle: ContentBundle): ContentValidationR
       issues.push({ path: `taskPairs.${pair.id}`, code: "INVALID_INTERVENTION", message: "an active practice task requires exactly three reviewed interventions" });
     }
   }
+  if (bundle.contentAggregate) for (const issue of validateContentAggregate(bundle.contentAggregate)) issues.push({ path: "contentAggregate", code: "INVALID_PAIR", message: issue.message });
   return { valid: issues.length === 0, issues };
 }

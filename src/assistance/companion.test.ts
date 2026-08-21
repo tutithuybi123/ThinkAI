@@ -1,0 +1,4 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { PracticeCompanionService } from "./companion.js";
+test("provider candidates are classified before delivery and never set score policy",async()=>{const safe=new PracticeCompanionService({reply:async()=>({reply:"Consider the slope",proposedSupportLevel:"CONCEPTUAL_HINT"})},()=>new Date("2026-08-20T00:00:00Z"));const result=await safe.respond({learnerMessage:"help",guidanceVersion:"g1",messageId:"m1"});assert.equal(result.delivery,"Consider the slope");assert.equal(result.record.supportLevel,"CONCEPTUAL_HINT");const blocked=new PracticeCompanionService({reply:async()=>({reply:"The final answer is 4",proposedSupportLevel:"STRONG_SCAFFOLD"})});const hidden=await blocked.respond({learnerMessage:"help",guidanceVersion:"g1",messageId:"m2"});assert.equal(hidden.delivery,undefined);assert.equal(hidden.record.answerRevealAttempted,true);assert.equal(hidden.record.responseBlocked,true);});

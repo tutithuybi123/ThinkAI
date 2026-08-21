@@ -1,0 +1,5 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { evaluateReviewedRubric } from "./evaluator.js";
+const input={taskVersion:"t",rubricVersion:"r",rawText:"x",shape:{finalAnswerFacet:"required" as const,reasoningFacet:"required" as const,requiredCriterionIds:["m"],optionalCriterionIds:[]},criterionIds:["m"],provenance:{adapterId:"fake",modelVersion:"fake-v1",schemaVersion:"v1"}};
+test("provider-independent evaluator yields facets only and fails closed",async()=>{const valid=await evaluateReviewedRubric({evaluate:async()=>({finalAnswer:"correct",reasoning:"correct",criteria:[{id:"m",status:"correct"}],errors:[],confidence:"low",evaluatorVersion:"e"})},input);assert.equal(valid.status,"valid");assert.equal("outcome" in (valid.facets??{}),false);const invalid=await evaluateReviewedRubric({evaluate:async()=>({})},input);assert.equal(invalid.status,"invalid");const unavailable=await evaluateReviewedRubric({evaluate:async()=>{throw Error("down")}},input);assert.equal(unavailable.status,"unavailable");});

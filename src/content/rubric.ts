@@ -1,0 +1,23 @@
+import type { AssistanceLevel } from "../assistance/contracts.js";
+
+export interface ReviewedRubricGradingShape { readonly finalAnswerFacet: "required" | "not_applicable"; readonly reasoningFacet: "required" | "not_applicable"; readonly requiredCriterionIds: readonly string[]; readonly optionalCriterionIds: readonly string[]; }
+export interface ReviewedAssessment { readonly expectedResult: string; readonly gradingShape: ReviewedRubricGradingShape; readonly criteria: readonly { readonly id: string; readonly description: string }[]; readonly referenceSolutions: readonly { readonly format: "plain_text" | "markdown"; readonly body: string }[]; readonly commonMisconceptions: readonly string[]; readonly aiGuidance: { readonly version: string; readonly allowedSupportLevels: readonly Exclude<AssistanceLevel, "NONE">[] }; }
+export interface RubricValidationIssue { readonly code: string; readonly message: string; }
+const duplicate = (values: readonly string[]) => new Set(values).size !== values.length;
+export function validateReviewedAssessment(value: unknown): readonly RubricValidationIssue[] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return [{ code: "INVALID_REVIEWED_ASSESSMENT", message: "Assessment must be an object." }];
+  const assessment = value as Record<string, unknown>; const shape = assessment.gradingShape as Record<string, unknown> | undefined; const criteria = assessment.criteria;
+  if (typeof assessment.expectedResult !== "string" || !assessment.expectedResult.trim() || !shape || typeof shape !== "object" || !Array.isArray(shape.requiredCriterionIds) || !Array.isArray(shape.optionalCriterionIds) || !Array.isArray(criteria) || !Array.isArray(assessment.referenceSolutions) || !Array.isArray(assessment.commonMisconceptions) || !assessment.aiGuidance || typeof assessment.aiGuidance !== "object") return [{ code: "INVALID_REVIEWED_ASSESSMENT", message: "Assessment shape is incomplete." }];
+  const guidance = assessment.aiGuidance as Record<string, unknown>;
+  if (!criteria.every((x) => !!x && typeof x === "object" && typeof (x as Record<string, unknown>).id === "string" && !!String((x as Record<string, unknown>).id).trim() && typeof (x as Record<string, unknown>).description === "string" && !!String((x as Record<string, unknown>).description).trim()) || !assessment.referenceSolutions.every((x) => !!x && typeof x === "object" && ["plain_text", "markdown"].includes(String((x as Record<string, unknown>).format)) && typeof (x as Record<string, unknown>).body === "string" && !!String((x as Record<string, unknown>).body).trim()) || !assessment.commonMisconceptions.every((x) => typeof x === "string") || typeof guidance.version !== "string" || !guidance.version.trim() || !Array.isArray(guidance.allowedSupportLevels) || !guidance.allowedSupportLevels.every((x) => ["PROMPT", "CONCEPTUAL_HINT", "STRATEGIC_HINT", "STRONG_SCAFFOLD"].includes(String(x)))) return [{ code: "INVALID_REVIEWED_ASSESSMENT", message: "Assessment metadata is malformed." }];
+  const typed = assessment as unknown as ReviewedAssessment;
+  const issues: RubricValidationIssue[] = [];
+  const required = typed.gradingShape.requiredCriterionIds; const optional = typed.gradingShape.optionalCriterionIds; const known = new Set(typed.criteria.map((criterion) => criterion.id));
+  if (!(typed.gradingShape.finalAnswerFacet === "required" || typed.gradingShape.finalAnswerFacet === "not_applicable") || !(typed.gradingShape.reasoningFacet === "required" || typed.gradingShape.reasoningFacet === "not_applicable")) issues.push({ code: "INVALID_FACET_CONFIGURATION", message: "Reviewed grading facets must use the approved values." });
+  if (new Set(typed.criteria.map((criterion) => criterion.id)).size !== typed.criteria.length) issues.push({ code: "INVALID_CRITERIA", message: "Rubric criteria need unique IDs and descriptions." });
+  if (duplicate(required) || duplicate(optional)) issues.push({ code: "DUPLICATE_CRITERION_ID", message: "Required and optional criterion IDs must each be unique." });
+  if (required.some((id) => optional.includes(id))) issues.push({ code: "CRITERION_SETS_NOT_DISJOINT", message: "Required and optional criterion IDs must be disjoint." });
+  if ([...required, ...optional].some((id) => !known.has(id))) issues.push({ code: "UNKNOWN_CRITERION_ID", message: "Grading shape references an unknown rubric criterion." });
+  if (typed.referenceSolutions.length === 0) issues.push({ code: "INVALID_REVIEWED_ASSESSMENT", message: "At least one non-canonical reference solution is required." });
+  return issues;
+}

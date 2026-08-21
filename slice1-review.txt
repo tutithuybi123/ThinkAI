@@ -1,0 +1,531 @@
+SLICE 1 EXTERNAL REVIEW BUNDLE
+
+ src/content/repository.test.ts | 11 +++++++++++
+ src/content/repository.ts      |  9 +++++++++
+ src/content/schema.ts          |  7 ++++++-
+ src/content/snapshot.ts        | 18 +++++++++++++++++-
+ src/content/validator.ts       |  8 ++++++++
+ src/domain/ids.ts              |  8 ++++++++
+ src/scoring/service.test.ts    |  5 +++++
+ src/scoring/service.ts         |  2 ++
+ 8 files changed, 66 insertions(+), 2 deletions(-)
+ M src/content/repository.test.ts
+ M src/content/repository.ts
+ M src/content/schema.ts
+ M src/content/snapshot.ts
+ M src/content/validator.ts
+ M src/domain/ids.ts
+ M src/scoring/service.test.ts
+ M src/scoring/service.ts
+?? slice1-review.txt
+?? slice1.diff
+?? src/content/aggregate.test.ts
+?? src/content/immutable.ts
+?? src/content/lifecycle.test.ts
+?? src/content/lifecycle.ts
+?? src/content/publication.ts
+?? src/content/rubric.test.ts
+?? src/content/rubric.ts
+?? src/content/selection.ts
+?? src/content/v11-validator.ts
+diff --git a/src/content/repository.test.ts b/src/content/repository.test.ts
+index 339e988..4ca5de2 100644
+--- a/src/content/repository.test.ts
++++ b/src/content/repository.test.ts
+@@ -5,11 +5,22 @@ import { taskId } from "../domain/ids.js";
+ import { packageAStructuralFixture } from "../fixtures/package-a-structural.js";
+ import { ContentLoadError, loadReviewedContentBundle } from "./loader.js";
+ import { ReviewedContentRepository } from "./repository.js";
++import { createReviewedPairSnapshot } from "./snapshot.js";
+ 
+ test("production loader rejects structural-only content fixtures", () => {
+   assert.throws(() => loadReviewedContentBundle(packageAStructuralFixture), ContentLoadError);
+ });
+ 
++test("written assessment snapshots own immutable authored content", () => {
++  const fixture = structuredClone(packageAStructuralFixture);
++  const practice = fixture.tasks[0]! as typeof fixture.tasks[0] & { answerSpec: any };
++  practice.answerSpec = { kind: "written_solution", assessment: { expectedResult: "2", gradingShape: { finalAnswerFacet: "required", reasoningFacet: "required", requiredCriterionIds: [], optionalCriterionIds: [] }, criteria: [], referenceSolutions: [{ format: "plain_text", body: "original" }], commonMisconceptions: [], aiGuidance: { version: "g1", allowedSupportLevels: ["PROMPT"] } } };
++  const snapshot = createReviewedPairSnapshot(fixture.taskPairs[0]!, practice, fixture.tasks[1]!, fixture.interventions);
++  practice.answerSpec.assessment.referenceSolutions[0]!.body = "changed";
++  assert.equal((snapshot.assessment as any).referenceSolutions[0].body, "original");
++  assert.throws(() => { (snapshot.assessment as any).referenceSolutions.push({}); });
++});
++
+ test("test-only loader creates a reviewed repository and stable pair snapshot", () => {
+   const repository = ReviewedContentRepository.fromRaw(packageAStructuralFixture, { allowStructuralTestFixture: true });
+   const snapshot = repository.createPairSnapshot(packageAStructuralFixture.taskPairs[0]!.id);
+diff --git a/src/content/repository.ts b/src/content/repository.ts
+index 69caa69..d173568 100644
+--- a/src/content/repository.ts
++++ b/src/content/repository.ts
+@@ -2,6 +2,8 @@ import type { TaskPairId, TaskId } from "../domain/ids.js";
+ import type { ContentBundle, InterventionContent, ReviewedTaskPair, TaskContent } from "./schema.js";
+ import { loadReviewedContentBundle, type ContentLoadOptions } from "./loader.js";
+ import { assertSnapshotIntegrity, createReviewedPairSnapshot, type ReviewedPairSnapshot, type SnapshotSource } from "./snapshot.js";
++import type { ContentRevisionId } from "../domain/ids.js";
++import type { MicroSkillAggregate } from "./v11-validator.js";
+ 
+ /** In-memory reviewed-content repository only. Persistence is deliberately Package C work. */
+ export class ReviewedContentRepository implements SnapshotSource {
+@@ -55,6 +57,13 @@ export class ReviewedContentRepository implements SnapshotSource {
+     return createReviewedPairSnapshot(pair, practice, transfer, this.getInterventionsForPracticeTask(practice.id));
+   }
+ 
++  /** v1.1 read boundary; later persistence supplies the same aggregate shape. */
++  public getMicroSkillRevision(id: ContentRevisionId): MicroSkillAggregate {
++    const aggregate = this.bundle.contentAggregate?.microSkills.find((item) => item.microSkill.revisionId === id);
++    if (!aggregate) throw new Error(`Micro-skill revision ${id} is unavailable.`);
++    return aggregate;
++  }
++
+   public assertSnapshotIntegrity(snapshot: ReviewedPairSnapshot): void {
+     assertSnapshotIntegrity(snapshot, this);
+   }
+diff --git a/src/content/schema.ts b/src/content/schema.ts
+index 794d509..8a924fe 100644
+--- a/src/content/schema.ts
++++ b/src/content/schema.ts
+@@ -5,6 +5,8 @@ import type {
+   TaskId,
+   TaskPairId,
+ } from "../domain/ids.js";
++import type { ReviewedAssessment } from "./rubric.js";
++import type { ContentAggregate } from "./v11-validator.js";
+ 
+ export const REVIEW_STATUSES = ["draft", "approved", "withdrawn"] as const;
+ export type ReviewStatus = (typeof REVIEW_STATUSES)[number];
+@@ -45,11 +47,12 @@ export interface TaskFamilyContent {
+   review: ReviewRecord;
+ }
+ 
+-export type AnswerSpec =
++export type DeterministicAnswerSpec =
+   | { kind: "exact_text"; accepted: readonly string[]; normalizationVersion: string }
+   | { kind: "numeric"; expected: string; tolerance?: string; normalizationVersion: string }
+   | { kind: "expression"; expected: string; equivalencePolicy: "symbolic"; normalizationVersion: string }
+   | { kind: "choice"; acceptedOptionIds: readonly string[]; normalizationVersion: string };
++export type AnswerSpec = DeterministicAnswerSpec | { kind: "written_solution"; deterministicFinal?: DeterministicAnswerSpec; assessment: ReviewedAssessment };
+ 
+ export interface TaskContent {
+   id: TaskId;
+@@ -103,4 +106,6 @@ export interface ContentBundle {
+   tasks: readonly TaskContent[];
+   taskPairs: readonly ReviewedTaskPair[];
+   interventions: readonly InterventionContent[];
++  /** Optional v1.1 aggregate extension; omitted by frozen v1.0 bundles. */
++  contentAggregate?: ContentAggregate;
+ }
+diff --git a/src/content/snapshot.ts b/src/content/snapshot.ts
+index c653a21..fc9e553 100644
+--- a/src/content/snapshot.ts
++++ b/src/content/snapshot.ts
+@@ -1,5 +1,8 @@
+ import type { InterventionContent, ReviewedTaskPair, TaskContent } from "./schema.js";
+ import type { TaskPairId } from "../domain/ids.js";
++import type { MicroSkillAggregate } from "./v11-validator.js";
++import type { ReviewedPairChoice } from "./selection.js";
++import { immutableCopy } from "./immutable.js";
+ 
+ export interface VersionReference {
+   id: string;
+@@ -12,6 +15,9 @@ export interface ReviewedPairSnapshot {
+   transferTask: VersionReference;
+   interventions: readonly VersionReference[];
+   integrityKey: string;
++  /** v1.1 authored fields remain optional so v1.0 historical snapshots retain meaning. */
++  assessment?: unknown;
++  aiGuidanceVersion?: string;
+ }
+ 
+ export function createReviewedPairSnapshot(
+@@ -21,12 +27,14 @@ export function createReviewedPairSnapshot(
+   interventions: readonly InterventionContent[],
+ ): ReviewedPairSnapshot {
+   const references = [pair, practiceTask, transferTask, ...interventions].map((item) => `${item.id}@${item.version}`);
++  const written = practiceTask.answerSpec.kind === "written_solution" ? practiceTask.answerSpec : undefined;
+   return Object.freeze({
+     pair: Object.freeze({ id: pair.id, version: pair.version }),
+     practiceTask: Object.freeze({ id: practiceTask.id, version: practiceTask.version }),
+     transferTask: Object.freeze({ id: transferTask.id, version: transferTask.version }),
+     interventions: Object.freeze(interventions.map((item) => Object.freeze({ id: item.id, version: item.version }))),
+-    integrityKey: references.join("|"),
++    integrityKey: [...references, ...(written ? [`assessment:${JSON.stringify(written.assessment)}`, `guidance:${written.assessment.aiGuidance.version}`] : [])].join("|"),
++    ...(written ? { assessment: immutableCopy(written.assessment), aiGuidanceVersion: written.assessment.aiGuidance.version } : {}),
+   });
+ }
+ 
+@@ -46,3 +54,11 @@ export function assertSnapshotIntegrity(snapshot: ReviewedPairSnapshot, source:
+     throw new Error(`Content snapshot integrity mismatch for ${snapshot.pair.id}.`);
+   }
+ }
++
++export interface AggregatePairSnapshot { readonly microSkillRevisionId: string; readonly pair: Readonly<MicroSkillAggregate["pairs"][number]>; readonly subjectId: string; readonly topicId: string; readonly microSkillId: string; readonly authoredAggregate: Readonly<MicroSkillAggregate>; }
++/** Selection is supplied by the server; this only freezes that exact selected authored pair. */
++export function createAggregatePairSnapshot(aggregate: MicroSkillAggregate, selected: ReviewedPairChoice): AggregatePairSnapshot {
++  if (!aggregate.pairs.some((pair) => pair.id === selected.id && pair.version === selected.version)) throw new Error("Selected pair is not in the authored micro-skill bank.");
++  const canonical = aggregate.pairs.find((pair) => pair.id === selected.id && pair.version === selected.version)!;
++  return Object.freeze({ microSkillRevisionId: aggregate.microSkill.revisionId, pair: immutableCopy(canonical), subjectId: aggregate.subject.id, topicId: aggregate.topic.id, microSkillId: aggregate.microSkill.id, authoredAggregate: immutableCopy(aggregate) });
++}
+diff --git a/src/content/validator.ts b/src/content/validator.ts
+index 438540b..e292aa1 100644
+--- a/src/content/validator.ts
++++ b/src/content/validator.ts
+@@ -1,5 +1,7 @@
+ import { CONTENT_CONTRACT_VERSION } from "../domain/policies.js";
+ import { CHANGE_DIMENSIONS, EXPOSURE_TAGS, REVIEW_STATUSES, type ContentBundle } from "./schema.js";
++import { validateReviewedAssessment } from "./rubric.js";
++import { validateContentAggregate } from "./v11-validator.js";
+ 
+ export interface ContentValidationIssue {
+   path: string;
+@@ -76,6 +78,11 @@ function validateAnswerSpec(
+         issues.push({ path, code: "INVALID_ANSWER_SPEC", message: "one or more unique accepted option IDs are required" });
+       }
+       break;
++    case "written_solution":
++      if (!answerSpec.assessment || validateReviewedAssessment(answerSpec.assessment).length) {
++        issues.push({ path, code: "INVALID_ANSWER_SPEC", message: "written solutions require a valid reviewed assessment" });
++      }
++      break;
+     default:
+       issues.push({ path, code: "INVALID_ANSWER_SPEC", message: "uses an unsupported answer specification kind" });
+   }
+@@ -176,5 +183,6 @@ export function validateContentBundle(bundle: ContentBundle): ContentValidationR
+       issues.push({ path: `taskPairs.${pair.id}`, code: "INVALID_INTERVENTION", message: "an active practice task requires exactly three reviewed interventions" });
+     }
+   }
++  if (bundle.contentAggregate) for (const issue of validateContentAggregate(bundle.contentAggregate)) issues.push({ path: "contentAggregate", code: "INVALID_PAIR", message: issue.message });
+   return { valid: issues.length === 0, issues };
+ }
+diff --git a/src/domain/ids.ts b/src/domain/ids.ts
+index 79abdef..54c1584 100644
+--- a/src/domain/ids.ts
++++ b/src/domain/ids.ts
+@@ -11,6 +11,10 @@ export type ChallengeSessionId = Brand<string, "ChallengeSessionId">;
+ export type TransferSessionId = Brand<string, "TransferSessionId">;
+ export type EvidenceEventId = Brand<string, "EvidenceEventId">;
+ export type CapabilityReceiptId = Brand<string, "CapabilityReceiptId">;
++export type SubjectId = Brand<string, "SubjectId">;
++export type TopicId = Brand<string, "TopicId">;
++export type MicroSkillId = Brand<string, "MicroSkillId">;
++export type ContentRevisionId = Brand<string, "ContentRevisionId">;
+ 
+ function brandId<Name extends string>(value: string, prefix: string): Brand<string, Name> {
+   if (!new RegExp(`^${prefix}[a-z0-9_-]+$`).test(value)) {
+@@ -29,3 +33,7 @@ export const challengeSessionId = (value: string): ChallengeSessionId => brandId
+ export const transferSessionId = (value: string): TransferSessionId => brandId<"TransferSessionId">(value, "transfer_");
+ export const evidenceEventId = (value: string): EvidenceEventId => brandId<"EvidenceEventId">(value, "event_");
+ export const capabilityReceiptId = (value: string): CapabilityReceiptId => brandId<"CapabilityReceiptId">(value, "receipt_");
++export const subjectId = (value: string): SubjectId => brandId<"SubjectId">(value, "subject_");
++export const topicId = (value: string): TopicId => brandId<"TopicId">(value, "topic_");
++export const microSkillId = (value: string): MicroSkillId => brandId<"MicroSkillId">(value, "micro_");
++export const contentRevisionId = (value: string): ContentRevisionId => brandId<"ContentRevisionId">(value, "revision_");
+diff --git a/src/scoring/service.test.ts b/src/scoring/service.test.ts
+index ce83fe8..39c1a84 100644
+--- a/src/scoring/service.test.ts
++++ b/src/scoring/service.test.ts
+@@ -45,3 +45,8 @@ test("rejects malformed answers and unsupported expression specs deterministical
+   });
+   assert.equal(score(numeric, null).outcome, "invalid");
+ });
++
++test("leaves written solutions for the later reviewed-rubric route", () => {
++  const written: AnswerSpec = { kind: "written_solution", assessment: { expectedResult: "2", gradingShape: { finalAnswerFacet: "required", reasoningFacet: "required", requiredCriterionIds: [], optionalCriterionIds: [] }, criteria: [], referenceSolutions: [{ format: "plain_text", body: "Any valid method." }], commonMisconceptions: [], aiGuidance: { version: "g1", allowedSupportLevels: ["PROMPT"] } } };
++  assert.equal(score(written, { kind: "written_solution", rawText: "I used two points." } as never).outcome, "invalid");
++});
+diff --git a/src/scoring/service.ts b/src/scoring/service.ts
+index 93a5377..651f83e 100644
+--- a/src/scoring/service.ts
++++ b/src/scoring/service.ts
+@@ -163,6 +163,8 @@ export class DeterministicScoringService implements ScoringService {
+       case "numeric": return scoreNumeric(spec, answer);
+       // A symbolic adapter must be explicitly reviewed and deterministic. None is installed for MVP.
+       case "expression": return invalid(spec.normalizationVersion);
++      // Written solutions are deliberately deferred to the reviewed-rubric route.
++      case "written_solution": return invalid("written-solution-rubric-pending");
+     }
+   }
+ }
+
+===== src/content/aggregate.test.ts =====
+
+import assert from "node:assert/strict";
+import test from "node:test";
+import { actorId, contentRevisionId, microSkillId, subjectId, taskId, taskPairId, topicId } from "../domain/ids.js";
+import { selectFreshTransferPair, selectInitialPair } from "./selection.js";
+import { validateContentAggregate } from "./v11-validator.js";
+import { createAggregatePairSnapshot } from "./snapshot.js";
+import { validateContentBundle } from "./validator.js";
+import { packageAStructuralFixture } from "../fixtures/package-a-structural.js";
+import { assertPublishableContent, validatePublishableContent } from "./publication.js";
+
+const assessment = { expectedResult: "2", gradingShape: { finalAnswerFacet: "required" as const, reasoningFacet: "required" as const, requiredCriterionIds: ["method"], optionalCriterionIds: [] }, criteria: [{ id: "method", description: "method" }], referenceSolutions: [{ format: "plain_text" as const, body: "alternate" }], commonMisconceptions: ["swap"], aiGuidance: { version: "g1", allowedSupportLevels: ["PROMPT"] as const } };
+const pair = (id: string, transfer = `task_${id}_transfer`) => { const practiceId = taskId(`task_${id}_practice`); const transferId = taskId(transfer); return { id: taskPairId(`pair_${id}`), version: "1", microSkillRevisionId: contentRevisionId("revision_gradient_1"), practiceTask: { id: practiceId, version: "1", role: "practice" as const }, transferTask: { id: transferId, version: "1", role: "transfer" as const }, practiceContent: { id: practiceId, version: "1", role: "practice" as const, prompt: { format: "plain_text" as const, body: "practice" }, answerSpec: { kind: "written_solution" as const, assessment } }, transferContent: { id: transferId, version: "1", role: "transfer" as const, prompt: { format: "plain_text" as const, body: "transfer" }, answerSpec: { kind: "exact_text" as const, accepted: ["2"], normalizationVersion: "v1" } }, connectionReveal: { id: "reveal_a", version: "1", pairId: taskPairId(`pair_${id}`), pairVersion: "1", title: "relation", sharedRelation: "same", explanation: { format: "plain_text" as const, body: "same idea" } } }; };
+const base = () => ({ subject: { id: subjectId("subject_math"), displayOrder: 1 }, topic: { id: topicId("topic_linear"), subjectId: subjectId("subject_math"), displayOrder: 1 }, microSkill: { id: microSkillId("micro_gradient"), topicId: topicId("topic_linear"), revisionId: contentRevisionId("revision_gradient_1"), displayOrder: 1, prerequisiteMicroSkillIds: [] }, pairs: [pair("a"), pair("b")] });
+
+test("validates multi-node authored progression and rejects cycles", () => {
+  const a = base(); const b = { ...base(), microSkill: { ...base().microSkill, id: microSkillId("micro_intercept"), revisionId: contentRevisionId("revision_intercept_1"), prerequisiteMicroSkillIds: [a.microSkill.id] }, pairs: [] };
+  assert.deepEqual(validateContentAggregate({ microSkills: [a, b] }), []);
+  assert.match(validateContentAggregate({ microSkills: [a, { ...b, microSkill: { ...b.microSkill, prerequisiteMicroSkillIds: [a.microSkill.id, a.microSkill.id] } }] })[0]!.code, /DUPLICATE/);
+  const cyclic = { ...a, microSkill: { ...a.microSkill, prerequisiteMicroSkillIds: [b.microSkill.id] } };
+  assert.match(validateContentAggregate({ microSkills: [cyclic, b] })[0]!.code, /CYCLE/);
+});
+
+test("ContentBundle validates the authored graph as a containing aggregate", () => {
+  const a = base(); const b = { ...base(), microSkill: { ...base().microSkill, id: microSkillId("micro_intercept"), revisionId: contentRevisionId("revision_intercept_1"), prerequisiteMicroSkillIds: [a.microSkill.id] }, pairs: [] };
+  assert.equal(validateContentBundle({ ...packageAStructuralFixture, contentAggregate: { microSkills: [a, b] } }).valid, true);
+  assert.equal(validateContentBundle({ ...packageAStructuralFixture, contentAggregate: { microSkills: [{ ...a, microSkill: { ...a.microSkill, prerequisiteMicroSkillIds: [microSkillId("micro_unknown")] } }] } }).valid, false);
+});
+
+test("aggregate snapshot deep-freezes the selected pair and authored identity", () => {
+  const aggregate = base(); const selected = aggregate.pairs[0]!;
+  const snapshot = createAggregatePairSnapshot(aggregate, selected);
+  aggregate.pairs.reverse();
+  assert.equal(snapshot.microSkillRevisionId, aggregate.microSkill.revisionId);
+  assert.equal(snapshot.pair.id, selected.id);
+  assert.equal(Object.isFrozen(snapshot), true);
+  assert.equal(Object.isFrozen(snapshot.pair), true);
+  assert.equal(snapshot.authoredAggregate.pairs[0]!.id, selected.id);
+  (aggregate.microSkill as { title?: string }).title = "later draft edit";
+  assert.equal((snapshot.authoredAggregate.microSkill as { title?: string }).title, undefined);
+  assert.equal((snapshot.pair.practiceContent.answerSpec as { assessment: { aiGuidance: { version: string } } }).assessment.aiGuidance.version, "g1");
+  assert.equal(Object.isFrozen(snapshot.pair.practiceContent), true);
+  assert.throws(() => ((snapshot.pair.practiceContent.answerSpec as unknown as { assessment: { referenceSolutions: unknown[] } }).assessment.referenceSolutions.push("blocked")));
+  const forged = { ...selected, practiceTask: { ...selected.practiceTask, id: taskId("task_forged") } };
+  const canonical = createAggregatePairSnapshot(aggregate, forged);
+  assert.notEqual(canonical.pair.practiceTask.id, taskId("task_forged"));
+});
+
+test("server-owned pair policies are deterministic and never reuse exposed transfer material", () => {
+  const aggregate = base(); const actor = actorId("actor_learner");
+  assert.equal(selectInitialPair({ actorId: actor, microSkillRevisionId: aggregate.microSkill.revisionId, eligiblePairs: aggregate.pairs }).id, selectInitialPair({ actorId: actor, microSkillRevisionId: aggregate.microSkill.revisionId, eligiblePairs: aggregate.pairs }).id);
+  const fresh = selectFreshTransferPair({ actorId: actor, microSkillRevisionId: aggregate.microSkill.revisionId, independentAttemptOrdinal: 1, eligiblePairs: aggregate.pairs, exposedPairs: [{ pairId: aggregate.pairs[0]!.id, pairVersion: "1" }], exposedTransferTasks: [] });
+  assert.equal(fresh.kind, "PAIR_SELECTED"); if (fresh.kind === "PAIR_SELECTED") assert.notEqual(fresh.pair.id, aggregate.pairs[0]!.id);
+  assert.deepEqual(selectFreshTransferPair({ actorId: actor, microSkillRevisionId: aggregate.microSkill.revisionId, independentAttemptOrdinal: 1, eligiblePairs: aggregate.pairs, exposedPairs: [], exposedTransferTasks: aggregate.pairs.map((x) => ({ taskId: x.transferTask.id, version: x.transferTask.version })) }), { kind: "NO_FRESH_TRANSFER_AVAILABLE" });
+});
+
+test("draft aggregates may be incomplete but publication requires a complete pair bank", () => {
+  assert.ok(validateContentAggregate({ microSkills: [{ ...base(), pairs: [] } ] }).length === 0);
+  assert.deepEqual(validatePublishableContent({ microSkills: [{ ...base(), pairs: [] }] }), ["EMPTY_PUBLISHED_PAIR_BANK"]);
+  assert.deepEqual(validatePublishableContent({ microSkills: [base()] }), []);
+  assert.throws(() => assertPublishableContent({ microSkills: [{ ...base(), pairs: [] }] }), /EMPTY_PUBLISHED_PAIR_BANK/);
+});
+
+test("malformed aggregate data fails closed instead of throwing", () => {
+  assert.doesNotThrow(() => assert.notEqual(validateContentAggregate({ microSkills: [{ microSkill: { prerequisiteMicroSkillIds: "bad" }, pairs: [] }] } as unknown).length, 0));
+});
+
+
+===== src/content/immutable.ts =====
+
+/** Deep clone/freeze for the JSON-like authored-content boundary. */
+export function immutableCopy<T>(value: T): Readonly<T> {
+  const copy = structuredClone(value);
+  const freeze = (item: unknown): void => { if (item && typeof item === "object" && !Object.isFrozen(item)) { Object.freeze(item); for (const child of Object.values(item as Record<string, unknown>)) freeze(child); } };
+  freeze(copy); return copy as Readonly<T>;
+}
+
+
+===== src/content/lifecycle.test.ts =====
+
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import { contentRevisionId, microSkillId, subjectId, topicId } from "../domain/ids.js";
+import { approveRevision, createDraftRevision, deprecateRevision, editRevision, publishRevision, submitForReview } from "./lifecycle.js";
+
+const body = Object.freeze({
+  subject: { id: subjectId("subject_math"), title: "Mathematics", displayOrder: 1 },
+  topic: { id: topicId("topic_linear"), subjectId: subjectId("subject_math"), title: "Linear relations", displayOrder: 1 },
+  microSkill: { id: microSkillId("micro_gradient"), topicId: topicId("topic_linear"), title: "Find gradient", displayOrder: 1, prerequisiteMicroSkillIds: [] },
+});
+
+test("lifecycle permits only reviewed transitions and deprecation preserves the body", () => {
+  const draft = createDraftRevision({ id: contentRevisionId("revision_gradient_1"), body });
+  assert.throws(() => approveRevision(draft), /in-review/i);
+  assert.throws(() => publishRevision(draft), /approved/i);
+  const published = publishRevision(approveRevision(submitForReview(draft)));
+  const deprecated = deprecateRevision(published);
+  assert.equal(deprecated.lifecycle, "DEPRECATED");
+  assert.equal(deprecated.bodyHash, published.bodyHash);
+  assert.throws(() => publishRevision(deprecated), /approved/i);
+});
+
+test("only a draft body can be edited and review freezes its exact body", () => {
+  const draft = createDraftRevision({ id: contentRevisionId("revision_gradient_1"), body });
+  const edited = editRevision(draft, { ...body, microSkill: { ...body.microSkill, title: "Find a gradient" } });
+  const reviewed = submitForReview(edited);
+
+  assert.equal(reviewed.lifecycle, "IN_REVIEW");
+  assert.throws(() => editRevision(reviewed, body), /immutable/i);
+  assert.equal(reviewed.body.microSkill.title, "Find a gradient");
+});
+
+test("revision owns a recursively immutable body independent from its source", () => {
+  const source = { nested: { list: ["one"], guidance: { version: "v1" } } };
+  const reviewed = submitForReview(createDraftRevision({ id: contentRevisionId("revision_deep_1"), body: source }));
+  source.nested.list.push("later"); source.nested.guidance.version = "v2";
+  assert.deepEqual(reviewed.body, { nested: { list: ["one"], guidance: { version: "v1" } } });
+  assert.throws(() => (reviewed.body.nested.list as string[]).push("blocked"));
+  assert.throws(() => { (reviewed.body.nested.guidance as { version: string }).version = "blocked"; });
+  assert.equal(reviewed.bodyHash, createDraftRevision({ id: contentRevisionId("revision_deep_2"), body: { nested: { list: ["one"], guidance: { version: "v1" } } } }).bodyHash);
+});
+
+test("approval and publication preserve the reviewed body hash and later changes fork a new draft", () => {
+  const reviewed = submitForReview(createDraftRevision({ id: contentRevisionId("revision_gradient_1"), body }));
+  const approved = approveRevision(reviewed);
+  const published = publishRevision(approved);
+  const successor = editRevision(published, { ...body, microSkill: { ...body.microSkill, title: "Changed" } }, contentRevisionId("revision_gradient_2"));
+
+  assert.equal(approved.bodyHash, reviewed.bodyHash);
+  assert.equal(published.bodyHash, reviewed.bodyHash);
+  assert.equal(successor.lifecycle, "DRAFT");
+  assert.equal(successor.id, contentRevisionId("revision_gradient_2"));
+  assert.equal(published.body.microSkill.title, "Find gradient");
+});
+
+
+===== src/content/lifecycle.ts =====
+
+import { createHash } from "node:crypto";
+import type { ContentRevisionId } from "../domain/ids.js";
+import { immutableCopy } from "./immutable.js";
+
+export const CONTENT_LIFECYCLES = ["DRAFT", "IN_REVIEW", "APPROVED", "PUBLISHED", "DEPRECATED"] as const;
+export type ContentLifecycle = (typeof CONTENT_LIFECYCLES)[number];
+
+export interface ContentRevision<T> {
+  readonly id: ContentRevisionId;
+  readonly lifecycle: ContentLifecycle;
+  readonly body: Readonly<T>;
+  readonly bodyHash: string;
+}
+
+const hash = (value: unknown): string => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+const revision = <T>(id: ContentRevisionId, lifecycle: ContentLifecycle, body: T): ContentRevision<T> => { const owned = immutableCopy(body); return Object.freeze({ id, lifecycle, body: owned, bodyHash: hash(owned) }); };
+
+export function createDraftRevision<T>(input: { readonly id: ContentRevisionId; readonly body: T }): ContentRevision<T> { return revision(input.id, "DRAFT", input.body); }
+export function submitForReview<T>(source: ContentRevision<T>): ContentRevision<T> { if (source.lifecycle !== "DRAFT") throw new Error("Only a draft can enter review."); return revision(source.id, "IN_REVIEW", source.body); }
+export function approveRevision<T>(source: ContentRevision<T>): ContentRevision<T> { if (source.lifecycle !== "IN_REVIEW") throw new Error("Only an in-review revision can be approved."); return revision(source.id, "APPROVED", source.body); }
+export function publishRevision<T>(source: ContentRevision<T>): ContentRevision<T> { if (source.lifecycle !== "APPROVED") throw new Error("Only an approved revision can be published."); return revision(source.id, "PUBLISHED", source.body); }
+export function deprecateRevision<T>(source: ContentRevision<T>): ContentRevision<T> { if (source.lifecycle !== "PUBLISHED") throw new Error("Only a published revision can be deprecated."); return revision(source.id, "DEPRECATED", source.body); }
+export function editRevision<T>(source: ContentRevision<T>, body: T, successorId?: ContentRevisionId): ContentRevision<T> {
+  if (source.lifecycle === "DRAFT") return revision(source.id, "DRAFT", body);
+  if (!successorId) throw new Error("Reviewed content is immutable; create a successor draft.");
+  return revision(successorId, "DRAFT", body);
+}
+
+
+===== src/content/publication.ts =====
+
+import { validateContentAggregate, type ContentAggregate } from "./v11-validator.js";
+export function validatePublishableContent(aggregate: ContentAggregate): readonly string[] {
+  const issues = validateContentAggregate(aggregate).map((issue) => issue.code);
+  for (const node of aggregate.microSkills) if (!node.pairs.length) issues.push("EMPTY_PUBLISHED_PAIR_BANK");
+  return issues;
+}
+export function assertPublishableContent(aggregate: ContentAggregate): void { const issues = validatePublishableContent(aggregate); if (issues.length) throw new Error(`Content is not publishable: ${issues.join(",")}`); }
+
+
+===== src/content/rubric.test.ts =====
+
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import { validateReviewedAssessment } from "./rubric.js";
+
+const assessment = {
+  expectedResult: "m = 2",
+  gradingShape: { finalAnswerFacet: "required", reasoningFacet: "required", requiredCriterionIds: ["identify", "calculate"], optionalCriterionIds: ["notation"] },
+  criteria: [{ id: "identify", description: "Uses two points" }, { id: "calculate", description: "Computes rise over run" }, { id: "notation", description: "Uses gradient notation" }],
+  referenceSolutions: [{ format: "plain_text", body: "Use any two points and divide rise by run." }],
+  commonMisconceptions: ["Uses x divided by y"],
+  aiGuidance: { version: "guidance-v1", allowedSupportLevels: ["PROMPT"] },
+} as const;
+
+test("reviewed assessment rejects duplicate, overlapping, and unknown criterion requiredness", () => {
+  assert.deepEqual(validateReviewedAssessment(assessment), []);
+  assert.match(validateReviewedAssessment({ ...assessment, gradingShape: { ...assessment.gradingShape, requiredCriterionIds: ["identify", "identify"] } })[0]!.code, /DUPLICATE/);
+  assert.match(validateReviewedAssessment({ ...assessment, gradingShape: { ...assessment.gradingShape, optionalCriterionIds: ["identify"] } })[0]!.code, /DISJOINT/);
+  assert.match(validateReviewedAssessment({ ...assessment, gradingShape: { ...assessment.gradingShape, requiredCriterionIds: ["missing"] } })[0]!.code, /UNKNOWN/);
+  assert.match(validateReviewedAssessment({ ...assessment, gradingShape: { ...assessment.gradingShape, finalAnswerFacet: "invalid" as never } })[0]!.code, /FACET/);
+});
+
+test("malformed assessment values fail closed without throwing", () => {
+  for (const value of [{}, { expectedResult: "x" }, { ...assessment, referenceSolutions: [{ format: "pdf", body: "x" }] }, { ...assessment, aiGuidance: { version: "v", allowedSupportLevels: ["NONE"] } }]) assert.doesNotThrow(() => assert.notEqual(validateReviewedAssessment(value).length, 0));
+});
+
+
+===== src/content/rubric.ts =====
+
+import type { AssistanceLevel } from "../assistance/contracts.js";
+
+export interface ReviewedRubricGradingShape { readonly finalAnswerFacet: "required" | "not_applicable"; readonly reasoningFacet: "required" | "not_applicable"; readonly requiredCriterionIds: readonly string[]; readonly optionalCriterionIds: readonly string[]; }
+export interface ReviewedAssessment { readonly expectedResult: string; readonly gradingShape: ReviewedRubricGradingShape; readonly criteria: readonly { readonly id: string; readonly description: string }[]; readonly referenceSolutions: readonly { readonly format: "plain_text" | "markdown"; readonly body: string }[]; readonly commonMisconceptions: readonly string[]; readonly aiGuidance: { readonly version: string; readonly allowedSupportLevels: readonly Exclude<AssistanceLevel, "NONE">[] }; }
+export interface RubricValidationIssue { readonly code: string; readonly message: string; }
+const duplicate = (values: readonly string[]) => new Set(values).size !== values.length;
+export function validateReviewedAssessment(value: unknown): readonly RubricValidationIssue[] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return [{ code: "INVALID_REVIEWED_ASSESSMENT", message: "Assessment must be an object." }];
+  const assessment = value as Record<string, unknown>; const shape = assessment.gradingShape as Record<string, unknown> | undefined; const criteria = assessment.criteria;
+  if (typeof assessment.expectedResult !== "string" || !assessment.expectedResult.trim() || !shape || typeof shape !== "object" || !Array.isArray(shape.requiredCriterionIds) || !Array.isArray(shape.optionalCriterionIds) || !Array.isArray(criteria) || !Array.isArray(assessment.referenceSolutions) || !Array.isArray(assessment.commonMisconceptions) || !assessment.aiGuidance || typeof assessment.aiGuidance !== "object") return [{ code: "INVALID_REVIEWED_ASSESSMENT", message: "Assessment shape is incomplete." }];
+  const guidance = assessment.aiGuidance as Record<string, unknown>;
+  if (!criteria.every((x) => !!x && typeof x === "object" && typeof (x as Record<string, unknown>).id === "string" && !!String((x as Record<string, unknown>).id).trim() && typeof (x as Record<string, unknown>).description === "string" && !!String((x as Record<string, unknown>).description).trim()) || !assessment.referenceSolutions.every((x) => !!x && typeof x === "object" && ["plain_text", "markdown"].includes(String((x as Record<string, unknown>).format)) && typeof (x as Record<string, unknown>).body === "string" && !!String((x as Record<string, unknown>).body).trim()) || !assessment.commonMisconceptions.every((x) => typeof x === "string") || typeof guidance.version !== "string" || !guidance.version.trim() || !Array.isArray(guidance.allowedSupportLevels) || !guidance.allowedSupportLevels.every((x) => ["PROMPT", "CONCEPTUAL_HINT", "STRATEGIC_HINT", "STRONG_SCAFFOLD"].includes(String(x)))) return [{ code: "INVALID_REVIEWED_ASSESSMENT", message: "Assessment metadata is malformed." }];
+  const typed = assessment as unknown as ReviewedAssessment;
+  const issues: RubricValidationIssue[] = [];
+  const required = typed.gradingShape.requiredCriterionIds; const optional = typed.gradingShape.optionalCriterionIds; const known = new Set(typed.criteria.map((criterion) => criterion.id));
+  if (!(typed.gradingShape.finalAnswerFacet === "required" || typed.gradingShape.finalAnswerFacet === "not_applicable") || !(typed.gradingShape.reasoningFacet === "required" || typed.gradingShape.reasoningFacet === "not_applicable")) issues.push({ code: "INVALID_FACET_CONFIGURATION", message: "Reviewed grading facets must use the approved values." });
+  if (new Set(typed.criteria.map((criterion) => criterion.id)).size !== typed.criteria.length) issues.push({ code: "INVALID_CRITERIA", message: "Rubric criteria need unique IDs and descriptions." });
+  if (duplicate(required) || duplicate(optional)) issues.push({ code: "DUPLICATE_CRITERION_ID", message: "Required and optional criterion IDs must each be unique." });
+  if (required.some((id) => optional.includes(id))) issues.push({ code: "CRITERION_SETS_NOT_DISJOINT", message: "Required and optional criterion IDs must be disjoint." });
+  if ([...required, ...optional].some((id) => !known.has(id))) issues.push({ code: "UNKNOWN_CRITERION_ID", message: "Grading shape references an unknown rubric criterion." });
+  if (typed.referenceSolutions.length === 0) issues.push({ code: "INVALID_REVIEWED_ASSESSMENT", message: "At least one non-canonical reference solution is required." });
+  return issues;
+}
+
+
+===== src/content/selection.ts =====
+
+import { createHash } from "node:crypto";
+import type { ActorId, ContentRevisionId, TaskId, TaskPairId } from "../domain/ids.js";
+
+export interface ReviewedPairChoice { readonly id: TaskPairId; readonly version: string; readonly microSkillRevisionId: ContentRevisionId; readonly practiceTask: { readonly id: TaskId; readonly version: string; readonly role: "practice" }; readonly transferTask: { readonly id: TaskId; readonly version: string; readonly role: "transfer" }; }
+const ordinal = (seed: string, length: number) => Number(BigInt(`0x${createHash("sha256").update(seed).digest("hex").slice(0, 12)}`) % BigInt(length));
+export function selectInitialPair(input: { readonly actorId: ActorId; readonly microSkillRevisionId: ContentRevisionId; readonly eligiblePairs: readonly ReviewedPairChoice[] }): ReviewedPairChoice { if (!input.eligiblePairs.length) throw new Error("No eligible reviewed pairs."); return input.eligiblePairs[ordinal(`${input.actorId}|${input.microSkillRevisionId}`, input.eligiblePairs.length)]!; }
+export type FreshSelection = { readonly kind: "PAIR_SELECTED"; readonly pair: ReviewedPairChoice } | { readonly kind: "NO_FRESH_TRANSFER_AVAILABLE" };
+export function selectFreshTransferPair(input: { readonly actorId: ActorId; readonly microSkillRevisionId: ContentRevisionId; readonly independentAttemptOrdinal: number; readonly eligiblePairs: readonly ReviewedPairChoice[]; readonly exposedPairs: readonly { readonly pairId: TaskPairId; readonly pairVersion: string }[]; readonly exposedTransferTasks: readonly { readonly taskId: TaskId; readonly version: string }[] }): FreshSelection {
+  const pairs = input.eligiblePairs.filter((pair) => !input.exposedPairs.some((exposed) => exposed.pairId === pair.id && exposed.pairVersion === pair.version) && !input.exposedTransferTasks.some((exposed) => exposed.taskId === pair.transferTask.id && exposed.version === pair.transferTask.version));
+  return pairs.length ? { kind: "PAIR_SELECTED", pair: pairs[ordinal(`${input.actorId}|${input.microSkillRevisionId}|${input.independentAttemptOrdinal}`, pairs.length)]! } : { kind: "NO_FRESH_TRANSFER_AVAILABLE" };
+}
+
+
+===== src/content/v11-validator.ts =====
+
+import type { ContentRevisionId, MicroSkillId, SubjectId, TopicId } from "../domain/ids.js";
+import type { ReviewedPairChoice } from "./selection.js";
+import type { AnswerSpec, RichContent } from "./schema.js";
+export interface AuthoredTaskContent { readonly id: string; readonly version: string; readonly role: "practice" | "transfer"; readonly prompt: RichContent; readonly answerSpec: AnswerSpec; }
+export interface AuthoredConnectionReveal { readonly id: string; readonly version: string; readonly pairId: string; readonly pairVersion: string; readonly title: string; readonly sharedRelation: string; readonly explanation: RichContent; }
+export interface AuthoredReviewedPair extends ReviewedPairChoice { readonly practiceContent: AuthoredTaskContent; readonly transferContent: AuthoredTaskContent; readonly connectionReveal: AuthoredConnectionReveal; }
+export interface MicroSkillAggregate { readonly subject: { readonly id: SubjectId; readonly displayOrder: number }; readonly topic: { readonly id: TopicId; readonly subjectId: SubjectId; readonly displayOrder: number }; readonly microSkill: { readonly id: MicroSkillId; readonly topicId: TopicId; readonly revisionId: ContentRevisionId; readonly displayOrder: number; readonly prerequisiteMicroSkillIds: readonly MicroSkillId[]; readonly nextMicroSkillId?: MicroSkillId }; readonly pairs: readonly AuthoredReviewedPair[]; }
+export interface AggregateIssue { readonly code: string; readonly message: string; }
+export interface ContentAggregate { readonly microSkills: readonly MicroSkillAggregate[]; }
+export function validateContentAggregate(value: unknown): readonly AggregateIssue[] {
+  if (!value || typeof value !== "object" || !Array.isArray((value as { microSkills?: unknown }).microSkills)) return [{ code: "MALFORMED_CONTENT_AGGREGATE", message: "Authored aggregate must contain microSkills." }];
+  const aggregate = value as ContentAggregate;
+  if (aggregate.microSkills.some((node) => !node || typeof node !== "object" || !node.microSkill || typeof node.microSkill !== "object" || !node.topic || typeof node.topic !== "object" || !node.subject || typeof node.subject !== "object" || !Array.isArray(node.pairs) || !Array.isArray(node.microSkill.prerequisiteMicroSkillIds) || typeof node.microSkill.id !== "string" || typeof node.microSkill.revisionId !== "string" || typeof node.microSkill.topicId !== "string")) return [{ code: "MALFORMED_CONTENT_AGGREGATE", message: "Micro-skill nodes are malformed." }];
+  const issues: AggregateIssue[] = []; const nodes = new Map(aggregate.microSkills.map((node) => [node.microSkill.id, node]));
+  if (nodes.size !== aggregate.microSkills.length) issues.push({ code: "DUPLICATE_MICROSKILL_ID", message: "Micro-skill identities must be unique." });
+  if (new Set(aggregate.microSkills.map((node) => node.microSkill.revisionId)).size !== aggregate.microSkills.length) issues.push({ code: "DUPLICATE_CONTENT_REVISION_ID", message: "Content revision identities must be unique." });
+  for (const node of aggregate.microSkills) {
+    const { nextMicroSkillId: _next, ...identity } = node.microSkill; issues.push(...validateMicroSkillAggregate({ ...node, microSkill: { ...identity, prerequisiteMicroSkillIds: [] } }));
+    if (new Set(node.microSkill.prerequisiteMicroSkillIds).size !== node.microSkill.prerequisiteMicroSkillIds.length) issues.push({ code: "DUPLICATE_PREREQUISITE", message: "Prerequisites must be unique." }); for (const prerequisite of node.microSkill.prerequisiteMicroSkillIds) { const target = nodes.get(prerequisite); if (!target) issues.push({ code: "UNKNOWN_PREREQUISITE", message: "Prerequisite must be in the authored aggregate." }); else if (target.microSkill.topicId !== node.microSkill.topicId || target.topic.subjectId !== node.topic.subjectId) issues.push({ code: "CROSS_SCOPE_PROGRESSION", message: "Progression must remain within one Topic." }); if (prerequisite === node.microSkill.id) issues.push({ code: "SELF_PREREQUISITE", message: "A micro-skill cannot require itself." }); }
+    if (node.microSkill.nextMicroSkillId) { const target = nodes.get(node.microSkill.nextMicroSkillId); if (!target) issues.push({ code: "UNKNOWN_NEXT_RELATION", message: "Next relation must be in the authored aggregate." }); else if (target.microSkill.topicId !== node.microSkill.topicId || target.topic.subjectId !== node.topic.subjectId) issues.push({ code: "CROSS_SCOPE_PROGRESSION", message: "Progression must remain within one Topic." }); }
+  }
+  const forward = new Map<MicroSkillId, MicroSkillId[]>(); for (const id of nodes.keys()) forward.set(id, []); for (const node of aggregate.microSkills) { for (const prerequisite of node.microSkill.prerequisiteMicroSkillIds) forward.get(prerequisite)?.push(node.microSkill.id); if (node.microSkill.nextMicroSkillId) forward.get(node.microSkill.id)?.push(node.microSkill.nextMicroSkillId); } const visiting = new Set<MicroSkillId>(); const visited = new Set<MicroSkillId>(); const visit = (id: MicroSkillId): void => { if (visiting.has(id)) { issues.push({ code: "PROGRESSION_CYCLE", message: "Authored progression cannot cycle." }); return; } if (visited.has(id)) return; visiting.add(id); for (const edge of forward.get(id) ?? []) if (nodes.has(edge)) visit(edge); visiting.delete(id); visited.add(id); }; for (const id of nodes.keys()) visit(id); return issues;
+}
+export function validateMicroSkillAggregate(value: MicroSkillAggregate): readonly AggregateIssue[] { const issues: AggregateIssue[] = []; const skill = value.microSkill; if (value.topic.subjectId !== value.subject.id || skill.topicId !== value.topic.id) issues.push({ code: "HIERARCHY_OWNERSHIP_MISMATCH", message: "Topic and micro-skill must belong to the supplied hierarchy." }); if (!Number.isInteger(value.subject.displayOrder) || !Number.isInteger(value.topic.displayOrder) || !Number.isInteger(skill.displayOrder) || value.subject.displayOrder < 0 || value.topic.displayOrder < 0 || skill.displayOrder < 0) issues.push({ code: "INVALID_DISPLAY_ORDER", message: "Display orders must be non-negative integers." }); const ids = new Set<string>(); for (const pair of value.pairs) { const key = `${pair.id}@${pair.version}`; if (ids.has(key)) issues.push({ code: "DUPLICATE_PAIR_IDENTITY", message: "Pair identities must be unique." }); ids.add(key); const validTask = (task: AuthoredTaskContent, role: string) => task && task.role === role && !!task.id?.trim() && !!task.version?.trim() && !!task.prompt?.body?.trim() && (task.prompt.format === "plain_text" || task.prompt.format === "markdown"); if (pair.microSkillRevisionId !== skill.revisionId || !validTask(pair.practiceContent, "practice") || !validTask(pair.transferContent, "transfer") || pair.practiceContent.id !== pair.practiceTask.id || pair.transferContent.id !== pair.transferTask.id || pair.practiceContent.version !== pair.practiceTask.version || pair.transferContent.version !== pair.transferTask.version || pair.connectionReveal.pairId !== pair.id || pair.connectionReveal.pairVersion !== pair.version || !pair.connectionReveal.id?.trim() || !pair.connectionReveal.version?.trim() || !pair.connectionReveal.explanation?.body?.trim() || !["plain_text", "markdown"].includes(pair.connectionReveal.explanation?.format)) issues.push({ code: "INVALID_PAIR_BANK_RELATION", message: "Pair bank must bind exact reviewed task and reveal content." }); } return issues; }
+
+
+npm run check: PASS
+npm test: 79 pass; 9 environment skips; known pre-existing completed_result_missing_fail_closed

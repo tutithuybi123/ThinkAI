@@ -11,7 +11,11 @@ export interface ApiServices {
   skills(actor: ActorId): Promise<unknown>;
   progress(actor: ActorId): Promise<unknown>;
   audit(actor: ActorId, receiptId: string): Promise<unknown>;
+  health?():Promise<unknown>;
+  startPublishedPractice?(actor:ActorId,revisionId:string):Promise<unknown>;
   readonly practice: any; readonly transfer: any; readonly receipts: any;
+  readonly ops?: { createDraft(input:{id:any;body:any}):Promise<unknown>; get(id:string):Promise<unknown>; submitReview(id:string):Promise<unknown>; approve(id:string):Promise<unknown>; publish(id:string):Promise<unknown>; deprecate(id:string):Promise<unknown>; };
+  readonly companion?: { respond(input:{learnerMessage:string;guidanceVersion:string;messageId:string}):Promise<unknown> };
   readonly demo?: { reset(input:{resetBy:ActorId;idempotencyKey:string}): unknown | Promise<unknown>; health(): unknown | Promise<unknown> };
   readonly sessionBootstrap?: {
     issueLearner(profile: "clean" | "history"): { token: string; actorId: ActorId; role: "learner" } | Promise<{ token: string; actorId: ActorId; role: "learner" }>;
@@ -23,7 +27,7 @@ export interface ApiServices {
 const MAX_IDEMPOTENCY_KEY = 200;
 const MAX_ANSWER = 4_000;
 const MAX_REASONING = 8_000;
-const MAX_JSON_DEPTH = 8;
+const MAX_JSON_DEPTH = 24;
 const MAX_JSON_KEYS = 64;
 const response = (status: number, body: unknown): ApiResponse => ({ status, body });
 const failure = (code: string, status: number, message: string): ApiResponse => response(status, { error: { code, message } });
@@ -73,7 +77,7 @@ function answer(value: unknown): SubmittedAnswer | ApiResponse {
 }
 
 export async function dispatch(services: ApiServices, request: ApiRequest): Promise<ApiResponse> {
-  if (request.method === "GET" && request.path === "/healthz") return response(200, services.demo ? await services.demo.health() : { status:"ok", persistence:"unconfigured", ai:"disabled" });
+  if (request.method === "GET" && request.path === "/healthz") return response(200, services.health ? await services.health() : services.demo ? await services.demo.health() : { status:"ok", persistence:"unconfigured", ai:"disabled" });
   if (request.body !== undefined && !boundedJson(request.body)) return failure("INVALID_REQUEST", 400, "Request body exceeds structural limits.");
   const unauthenticatedBody = object(request.body);
   if (request.method === "POST" && request.path === "/api/v1/demo/session") {
@@ -95,6 +99,15 @@ export async function dispatch(services: ApiServices, request: ApiRequest): Prom
     if (request.method === "GET" && request.path === "/api/v1/home") return response(200, await services.home(actor.actorId));
     if (request.method === "GET" && request.path === "/api/v1/skills") return response(200, await services.skills(actor.actorId));
     if (request.method === "GET" && request.path === "/api/v1/progress") return response(200, await services.progress(actor.actorId));
+    if (request.method === "POST" && request.path === "/api/v1/practice/start" && typeof body?.microSkillRevisionId === "string" && services.startPublishedPractice) return response(201,await services.startPublishedPractice(actor.actorId,body.microSkillRevisionId));
+    if (parts[2] === "ops") {
+      if (actor.role !== "presenter" && actor.role !== "auditor") return failure("FORBIDDEN",403,"Content operations require staff authorization.");
+      if (!services.ops) return failure("NOT_FOUND",404,"Content operations are unavailable.");
+      if(request.method==="POST"&&parts[3]==="drafts"&&routeId(String(body?.revisionId??""))&&body?.contentAggregate)return response(201,await services.ops.createDraft({id:body.revisionId as any,body:body.contentAggregate as any}));
+      if (request.method === "GET" && parts[3] === "revisions" && routeId(parts[4])) return response(200,await services.ops.get(parts[4]!));
+      if (request.method !== "POST" || !body || !routeId(String(body.revisionId ?? ""))) return failure("INVALID_REQUEST",400,"A revision ID is required.");
+      const id=String(body.revisionId); if(parts[3]==="review")return response(200,await services.ops.submitReview(id)); if(parts[3]==="approve")return response(200,await services.ops.approve(id));if(parts[3]==="publish")return response(200,await services.ops.publish(id));if(parts[3]==="deprecate")return response(200,await services.ops.deprecate(id));
+    }
     if (request.method === "GET" && parts[2] === "challenges" && routeId(parts[3])) return response(200, await services.practice.resume(parts[3], actor.actorId));
     if (request.method === "GET" && parts[2] === "transfers" && routeId(parts[3])) return response(200, await services.transfer.resume(parts[3], actor.actorId));
     if (request.method === "GET" && parts[2] === "receipts" && routeId(parts[3])) return response(200, await services.receipts.get({ id: parts[3], actorId: actor.actorId }));
@@ -118,6 +131,7 @@ export async function dispatch(services: ApiServices, request: ApiRequest): Prom
       return failure("INVALID_ATTEMPT", 400, "Attempt must be exactly kind: attempt or cannot_start.");
     }
     if (parts[2] === "challenges" && routeId(parts[3]) && parts[4] === "interventions" && routeId(parts[5])) return response(200, await services.practice.openReviewedHint({ sessionId: parts[3], actorId: actor.actorId, actorSessionId: actor.sessionId, interventionId: parts[5], idempotencyKey: key }));
+    if(parts[2]==="challenges"&&routeId(parts[3])&&parts[4]==="companion"){if(!services.companion||typeof body.message!=="string")return failure("AI_UNAVAILABLE",503,"Practice Companion is unavailable.");await services.practice.resume(parts[3],actor.actorId);return response(200,await services.companion.respond({learnerMessage:body.message,guidanceVersion:"runtime-v1",messageId:key}));}
     if (parts[2] === "challenges" && routeId(parts[3]) && parts[4] === "submissions") { const value = answer(body.answer); if (isApiResponse(value)) return value; if (body.reasoning !== undefined && !boundedString(body.reasoning, MAX_REASONING)) return failure("SUBMISSION_INVALID", 400, "Reasoning must be bounded text."); return response(200, await services.practice.submit({ sessionId: parts[3], actorId: actor.actorId, actorSessionId: actor.sessionId, answer: value, idempotencyKey: key })); }
     if (parts[2] === "challenges" && routeId(parts[3]) && parts[4] === "transfer" && parts[5] === "start" && routeId(String(body.sessionId ?? ""))) return response(201, await services.transfer.start({ sessionId: body.sessionId, practiceSessionId: parts[3], actorId: actor.actorId, actorSessionId: actor.sessionId, idempotencyKey: key }));
     if (parts[2] === "transfers" && routeId(parts[3]) && parts[4] === "submissions") { const value = answer(body.answer); if (isApiResponse(value)) return value; return response(200, await services.transfer.submit({ sessionId: parts[3], actorId: actor.actorId, actorSessionId: actor.sessionId, answer: value, idempotencyKey: key })); }

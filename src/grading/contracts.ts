@@ -11,15 +11,18 @@ export interface RubricError {
 }
 
 /** Schema-validated evaluator evidence; never a policy decision. */
-export interface RubricEvaluation {
-  readonly outcome: GradingOutcome;
+/** Evaluator evidence only: it cannot supply a grading outcome or gate decision. */
+export interface RubricFacetEvaluation {
   readonly finalAnswer: FinalAnswerAssessment;
   readonly reasoning: ReasoningAssessment;
+  readonly criteria: readonly { readonly id:string; readonly status:ReasoningAssessment }[];
   readonly method?: string;
   readonly errors: readonly RubricError[];
   readonly confidence: "high" | "medium" | "low";
   readonly evaluatorVersion: string;
 }
+/** @deprecated Slice 4 will replace legacy aggregate consumers with facets. */
+export interface RubricEvaluation extends RubricFacetEvaluation { readonly outcome: GradingOutcome; }
 
 export type RubricStatus = "unavailable" | "malformed";
 

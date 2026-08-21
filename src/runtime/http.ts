@@ -12,7 +12,11 @@ export function apiServicesFromRuntime(runtime: ProductionRuntime): ApiServices 
     skills: runtime.skills,
     progress: runtime.progress,
     audit: runtime.audit,
+    health: runtime.health,
+    startPublishedPractice: runtime.startPublishedPractice,
     demo: runtime.demo,
+    ops: runtime.ops,
+    ...(runtime.companion?{companion:runtime.companion}:{}),
     sessionBootstrap: runtime.sessionBootstrap,
     ...(runtime.onDemoReset === undefined ? {} : { onDemoReset: runtime.onDemoReset }),
   };

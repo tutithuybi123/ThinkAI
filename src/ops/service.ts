@@ -1,0 +1,5 @@
+import type { ContentRevisionId } from "../domain/ids.js";
+import type { ContentAggregate } from "../content/v11-validator.js";
+import { createDraftRevision, type ContentRevision } from "../content/lifecycle.js";
+import { PostgresContentRevisionRepository } from "../content/postgres-repository.js";
+export class OpsService { constructor(private readonly content:PostgresContentRevisionRepository){} async createDraft(input:{id:ContentRevisionId;body:ContentAggregate}):Promise<ContentRevision<ContentAggregate>>{const draft=createDraftRevision(input);return this.content.createDraft(draft);} submitReview(id:ContentRevisionId){return this.content.submitForReview<ContentAggregate>(id);} approve(id:ContentRevisionId){return this.content.approve<ContentAggregate>(id);} publish(id:ContentRevisionId){return this.content.publish(id);} deprecate(id:ContentRevisionId){return this.content.deprecate<ContentAggregate>(id);} get(id:ContentRevisionId){return this.content.getRevision<ContentAggregate>(id);} }

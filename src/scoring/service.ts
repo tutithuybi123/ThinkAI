@@ -19,6 +19,7 @@ export interface ScoreResult {
   readonly normalizedAnswer?: string;
   readonly reasonCode?: ScoreReasonCode;
 }
+export interface DeterministicEvaluation { readonly applicability:"applicable"|"not_applicable"; readonly score?:ScoreResult; }
 
 export type ScorableTaskSnapshot = Pick<TaskContent, "answerSpec">;
 
@@ -163,8 +164,11 @@ export class DeterministicScoringService implements ScoringService {
       case "numeric": return scoreNumeric(spec, answer);
       // A symbolic adapter must be explicitly reviewed and deterministic. None is installed for MVP.
       case "expression": return invalid(spec.normalizationVersion);
+      // Written solutions are deliberately deferred to the reviewed-rubric route.
+      case "written_solution": return invalid("written-solution-rubric-pending");
     }
   }
 }
+export function evaluateDeterministic(taskSnapshot:ScorableTaskSnapshot,answer:unknown,service:ScoringService=new DeterministicScoringService()):DeterministicEvaluation { const kind=taskSnapshot.answerSpec.kind; if(kind==="written_solution"||kind==="expression") return {applicability:"not_applicable"}; return {applicability:"applicable",score:service.score(taskSnapshot,answer)}; }
 
 export const scoringService: ScoringService = new DeterministicScoringService();

@@ -2,6 +2,8 @@ import type { TaskPairId, TaskId } from "../domain/ids.js";
 import type { ContentBundle, InterventionContent, ReviewedTaskPair, TaskContent } from "./schema.js";
 import { loadReviewedContentBundle, type ContentLoadOptions } from "./loader.js";
 import { assertSnapshotIntegrity, createReviewedPairSnapshot, type ReviewedPairSnapshot, type SnapshotSource } from "./snapshot.js";
+import type { ContentRevisionId } from "../domain/ids.js";
+import type { MicroSkillAggregate } from "./v11-validator.js";
 
 /** In-memory reviewed-content repository only. Persistence is deliberately Package C work. */
 export class ReviewedContentRepository implements SnapshotSource {
@@ -53,6 +55,13 @@ export class ReviewedContentRepository implements SnapshotSource {
     const practice = this.getTask(pair.practiceTaskId);
     const transfer = this.getTask(pair.transferTaskId);
     return createReviewedPairSnapshot(pair, practice, transfer, this.getInterventionsForPracticeTask(practice.id));
+  }
+
+  /** v1.1 read boundary; later persistence supplies the same aggregate shape. */
+  public getMicroSkillRevision(id: ContentRevisionId): MicroSkillAggregate {
+    const aggregate = this.bundle.contentAggregate?.microSkills.find((item) => item.microSkill.revisionId === id);
+    if (!aggregate) throw new Error(`Micro-skill revision ${id} is unavailable.`);
+    return aggregate;
   }
 
   public assertSnapshotIntegrity(snapshot: ReviewedPairSnapshot): void {

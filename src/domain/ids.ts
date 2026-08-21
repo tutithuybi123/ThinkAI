@@ -11,6 +11,10 @@ export type ChallengeSessionId = Brand<string, "ChallengeSessionId">;
 export type TransferSessionId = Brand<string, "TransferSessionId">;
 export type EvidenceEventId = Brand<string, "EvidenceEventId">;
 export type CapabilityReceiptId = Brand<string, "CapabilityReceiptId">;
+export type SubjectId = Brand<string, "SubjectId">;
+export type TopicId = Brand<string, "TopicId">;
+export type MicroSkillId = Brand<string, "MicroSkillId">;
+export type ContentRevisionId = Brand<string, "ContentRevisionId">;
 
 function brandId<Name extends string>(value: string, prefix: string): Brand<string, Name> {
   if (!new RegExp(`^${prefix}[a-z0-9_-]+$`).test(value)) {
@@ -29,3 +33,7 @@ export const challengeSessionId = (value: string): ChallengeSessionId => brandId
 export const transferSessionId = (value: string): TransferSessionId => brandId<"TransferSessionId">(value, "transfer_");
 export const evidenceEventId = (value: string): EvidenceEventId => brandId<"EvidenceEventId">(value, "event_");
 export const capabilityReceiptId = (value: string): CapabilityReceiptId => brandId<"CapabilityReceiptId">(value, "receipt_");
+export const subjectId = (value: string): SubjectId => brandId<"SubjectId">(value, "subject_");
+export const topicId = (value: string): TopicId => brandId<"TopicId">(value, "topic_");
+export const microSkillId = (value: string): MicroSkillId => brandId<"MicroSkillId">(value, "micro_");
+export const contentRevisionId = (value: string): ContentRevisionId => brandId<"ContentRevisionId">(value, "revision_");

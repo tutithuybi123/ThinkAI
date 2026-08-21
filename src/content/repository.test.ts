@@ -5,9 +5,20 @@ import { taskId } from "../domain/ids.js";
 import { packageAStructuralFixture } from "../fixtures/package-a-structural.js";
 import { ContentLoadError, loadReviewedContentBundle } from "./loader.js";
 import { ReviewedContentRepository } from "./repository.js";
+import { createReviewedPairSnapshot } from "./snapshot.js";
 
 test("production loader rejects structural-only content fixtures", () => {
   assert.throws(() => loadReviewedContentBundle(packageAStructuralFixture), ContentLoadError);
+});
+
+test("written assessment snapshots own immutable authored content", () => {
+  const fixture = structuredClone(packageAStructuralFixture);
+  const practice = fixture.tasks[0]! as typeof fixture.tasks[0] & { answerSpec: any };
+  practice.answerSpec = { kind: "written_solution", assessment: { expectedResult: "2", gradingShape: { finalAnswerFacet: "required", reasoningFacet: "required", requiredCriterionIds: [], optionalCriterionIds: [] }, criteria: [], referenceSolutions: [{ format: "plain_text", body: "original" }], commonMisconceptions: [], aiGuidance: { version: "g1", allowedSupportLevels: ["PROMPT"] } } };
+  const snapshot = createReviewedPairSnapshot(fixture.taskPairs[0]!, practice, fixture.tasks[1]!, fixture.interventions);
+  practice.answerSpec.assessment.referenceSolutions[0]!.body = "changed";
+  assert.equal((snapshot.assessment as any).referenceSolutions[0].body, "original");
+  assert.throws(() => { (snapshot.assessment as any).referenceSolutions.push({}); });
 });
 
 test("test-only loader creates a reviewed repository and stable pair snapshot", () => {
