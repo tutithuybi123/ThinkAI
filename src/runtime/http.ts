@@ -14,6 +14,7 @@ export function apiServicesFromRuntime(runtime: ProductionRuntime): ApiServices 
     audit: runtime.audit,
     startPublishedPractice: runtime.startPublishedPractice,
     demo: runtime.demo,
+    ops: runtime.ops,
     sessionBootstrap: runtime.sessionBootstrap,
     ...(runtime.onDemoReset === undefined ? {} : { onDemoReset: runtime.onDemoReset }),
   };

@@ -16,6 +16,7 @@ import { PostgresDemoService } from "../demo/service.js";
 import type { DemoFixtureSeed } from "../demo/service.js";
 import { runMigrations } from "../persistence/migrations.js";
 import { PostgresContentRevisionRepository } from "../content/postgres-repository.js";
+import { OpsService } from "../ops/service.js";
 import { CONTENT_CONTRACT_VERSION } from "../domain/policies.js";
 
 export interface RuntimeConfiguration {
@@ -42,6 +43,7 @@ export interface ProductionRuntime {
   readonly receipts: CapabilityReceiptService;
   readonly demo: PostgresDemoService;
   readonly contentRevisions: PostgresContentRevisionRepository;
+  readonly ops: OpsService;
   startPublishedPractice(actor:ActorId,revisionId:string):Promise<unknown>;
   readonly sessionBootstrap: {
     issueLearner(profile: "clean" | "history"): Promise<{ token: string; actorId: ActorId; role: "learner" }>;
@@ -73,6 +75,7 @@ export async function createProductionRuntime(config: RuntimeConfiguration): Pro
   await runMigrations(client);
   const persistence = new PostgresTransactionalEvidencePersistence(client);
   const contentRevisions = new PostgresContentRevisionRepository(client);
+  const ops = new OpsService(contentRevisions);
   const scoring = new DeterministicScoringService();
   const signer = new SignedSessionService(config.sessionSecret);
   const auth = new PostgresSyntheticSessionRegistry(signer, client, [
@@ -92,6 +95,7 @@ export async function createProductionRuntime(config: RuntimeConfiguration): Pro
     receipts,
     demo,
     contentRevisions,
+    ops,
     async startPublishedPractice(actor:ActorId,revisionId:string){if(config.allowStructuralTestContent&&revisionId==="legacy_fixture"){const pair=content.selectApprovedPair();const sessionId=challengeSessionId(`challenge_${randomUUID().replaceAll("-","")}`);const started=await (new PracticeChallengeService(content,persistence,scoring)).start({sessionId,actorId:actor,idempotencyKey:`structural:${sessionId}`});return Object.freeze({sessionId:started.challenge.sessionId,microSkillRevisionId:revisionId,pairId:pair.id,pairVersion:pair.version,practiceTaskId:pair.practiceTaskId,practiceTaskVersion:content.getTask(pair.practiceTaskId).version});}const pair=await contentRevisions.selectInitialPublishedPair(actor,revisionId as never);const legacyPair=content.getReviewedPair(pair.id as never);const practiceTask=content.getTask(legacyPair.practiceTaskId);const transferTask=content.getTask(legacyPair.transferTaskId);if(legacyPair.version!==pair.version||legacyPair.practiceTaskId!==pair.practiceTask.id||legacyPair.transferTaskId!==pair.transferTask.id||practiceTask.version!==pair.practiceTask.version||transferTask.version!==pair.transferTask.version)throw Object.assign(new Error("Published content cannot be resolved by the Practice runtime."),{code:"CONTENT_INTEGRITY_FAILED"});const sessionId=challengeSessionId(`challenge_${randomUUID().replaceAll("-","")}`);const started=await (new PracticeChallengeService(content,persistence,scoring)).start({sessionId,actorId:actor,pairId:pair.id,idempotencyKey:`published:${revisionId}:${sessionId}`});return Object.freeze({sessionId:started.challenge.sessionId,microSkillRevisionId:revisionId,pairId:pair.id,pairVersion:pair.version,practiceTaskId:pair.practiceTask.id,practiceTaskVersion:pair.practiceTask.version});},
     sessionBootstrap: {
       async issueLearner(profile: "clean" | "history"): Promise<{ token: string; actorId: ActorId; role: "learner" }> {
