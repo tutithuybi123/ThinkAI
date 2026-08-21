@@ -15,7 +15,10 @@
     "openRouterFallback": "configuration-supported"
   },
   "limits": {
-    "teacherApprovedProductionContent": "not yet supplied",
-    "full learner content lifecycle E2E": "blocked pending approved content"
+    "TECHNICAL_RELEASE_READY": true,
+    "COMPETITION_CONTENT_APPROVED": false,
+    "COMPETITION_RELEASE_P0": "blocked_on_teacher_content",
+    "technicalContentLifecycle": "temporary labelled content was created through deployed /ops, published, resolved by learner API, then deprecated",
+    "teacherApprovedProductionContent": "not yet supplied"
   }
 }
