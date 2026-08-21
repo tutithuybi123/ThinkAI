@@ -129,6 +129,15 @@ verified_tools:
     location: ".agents/skills/tavily-{cli,search,extract,research}"
     notes: "Official requested skills and Tavily CLI 0.1.6 installed. Browser OAuth completed after a Windows npx.cmd launcher repair; harmless search, extract, and research verification succeeded with UTF-8 console output. No API key stored in project files."
 
+  - name: "ui-animation skill"
+    source: "https://github.com/mblode/agent-skills"
+    commit: "0ac9eb94205c043a72d78bf821654f6d89b1cffa"
+    installed_date: "2026-08-21"
+    status: "installed"
+    classification: "external skill"
+    location: "Codex global skills: D:\\AI\\codex-home\\thinkai-oauth\\skills\\ui-animation\\SKILL.md"
+    notes: "User-requested UI-motion design skill. Installed globally; no project runtime dependency, hooks, credentials, or learner data."
+
   - name: "Scholarly literature review skill"
     installed_date: "2026-08-11"
     status: "installed"
