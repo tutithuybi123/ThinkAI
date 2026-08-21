@@ -27,7 +27,7 @@ export interface ApiServices {
 const MAX_IDEMPOTENCY_KEY = 200;
 const MAX_ANSWER = 4_000;
 const MAX_REASONING = 8_000;
-const MAX_JSON_DEPTH = 8;
+const MAX_JSON_DEPTH = 24;
 const MAX_JSON_KEYS = 64;
 const response = (status: number, body: unknown): ApiResponse => ({ status, body });
 const failure = (code: string, status: number, message: string): ApiResponse => response(status, { error: { code, message } });
