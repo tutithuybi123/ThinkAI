@@ -16,16 +16,17 @@ import { PostgresDemoService } from "../demo/service.js";
 import type { DemoFixtureSeed } from "../demo/service.js";
 import { runMigrations } from "../persistence/migrations.js";
 import { PostgresContentRevisionRepository } from "../content/postgres-repository.js";
+import { CONTENT_CONTRACT_VERSION } from "../domain/policies.js";
 
 export interface RuntimeConfiguration {
   readonly databaseUrl: string;
   readonly sessionSecret: string;
-  readonly contentPath: string;
-  readonly demoSeedPath: string;
+  readonly contentPath?: string;
+  readonly demoSeedPath?: string;
   /** SHA-256 of the approved demo seed JSON bytes, set outside source control. */
-  readonly demoSeedSha256: string;
+  readonly demoSeedSha256?: string;
   /** Expected reviewed fixture version for both clean and historical seed data. */
-  readonly demoSeedVersion: string;
+  readonly demoSeedVersion?: string;
   /** Test-only: permits the labelled structural fixture for HTTP acceptance. */
   readonly allowStructuralTestContent?: boolean;
   /** Optional deployment-only secret that enables issuing presenter/auditor demo cookies. */
@@ -61,15 +62,13 @@ export interface ProductionRuntime {
  * fixture: an approved teacher-reviewed bundle must be supplied as JSON at startup.
  */
 export async function createProductionRuntime(config: RuntimeConfiguration): Promise<ProductionRuntime> {
-  const [rawContentText, rawSeedText] = await Promise.all([
-    readFile(config.contentPath, "utf8"),
-    readFile(config.demoSeedPath, "utf8"),
-  ]);
-  if (createHash("sha256").update(rawSeedText, "utf8").digest("hex") !== config.demoSeedSha256) throw new Error("Configured demo seed digest does not match the supplied approved seed.");
-  const rawContent = JSON.parse(rawContentText) as unknown;
-  const rawSeed = JSON.parse(rawSeedText) as DemoFixtureSeed;
-  if (rawSeed.clean.fixtureVersion !== config.demoSeedVersion || rawSeed.history.fixtureVersion !== config.demoSeedVersion) throw new Error("Configured demo seed version does not match the supplied approved seed.");
-  const content = ReviewedContentRepository.fromRaw(rawContent, config.allowStructuralTestContent ? { allowStructuralTestFixture: true } : {});
+  const bootstrapConfigured=!!(config.contentPath||config.demoSeedPath||config.demoSeedSha256||config.demoSeedVersion);
+  if(bootstrapConfigured&&(!config.contentPath||!config.demoSeedPath||!config.demoSeedSha256||!config.demoSeedVersion))throw new Error("Content bootstrap fields must be supplied together.");
+  const [rawContentText, rawSeedText] = bootstrapConfigured ? await Promise.all([readFile(config.contentPath!,"utf8"),readFile(config.demoSeedPath!,"utf8")]) : [undefined,undefined];
+  if(rawSeedText&&createHash("sha256").update(rawSeedText,"utf8").digest("hex")!==config.demoSeedSha256)throw new Error("Configured demo seed digest does not match the supplied approved seed.");
+  const rawSeed=rawSeedText?JSON.parse(rawSeedText) as DemoFixtureSeed:undefined;
+  if(rawSeed&&(rawSeed.clean.fixtureVersion!==config.demoSeedVersion||rawSeed.history.fixtureVersion!==config.demoSeedVersion))throw new Error("Configured demo seed version does not match the supplied approved seed.");
+  const content=rawContentText?ReviewedContentRepository.fromRaw(JSON.parse(rawContentText) as unknown,config.allowStructuralTestContent?{allowStructuralTestFixture:true}:{}) : new ReviewedContentRepository({contractVersion:CONTENT_CONTRACT_VERSION,fixtureProvenance:"teacher_reviewed",skills:[],taskFamilies:[],tasks:[],taskPairs:[],interventions:[]});
   const client = NodePostgresClient.fromConnectionString(config.databaseUrl);
   await runMigrations(client);
   const persistence = new PostgresTransactionalEvidencePersistence(client);
@@ -85,7 +84,7 @@ export async function createProductionRuntime(config: RuntimeConfiguration): Pro
   await auth.initialize();
   const receipts = new CapabilityReceiptService(persistence);
   const demo = new PostgresDemoService(client, config.cleanDemoActorId);
-  await demo.initialize(rawSeed);
+  if(rawSeed) await demo.initialize(rawSeed);
   return Object.freeze({
     auth,
     practice: new PracticeChallengeService(content, persistence, scoring),
@@ -132,10 +131,10 @@ export function runtimeConfigurationFromEnvironment(environment: NodeJS.ProcessE
   const demoSeedPath = environment.THINKAI_DEMO_SEED_PATH;
   const demoSeedSha256 = environment.THINKAI_DEMO_SEED_SHA256;
   const demoSeedVersion = environment.THINKAI_DEMO_SEED_VERSION;
-  if (!databaseUrl || !sessionSecret || !contentPath || !demoSeedPath || !demoSeedSha256 || !/^[a-f0-9]{64}$/i.test(demoSeedSha256) || !demoSeedVersion) throw new Error("THINKAI_DATABASE_URL, THINKAI_SESSION_SECRET, THINKAI_CONTENT_PATH, THINKAI_DEMO_SEED_PATH, THINKAI_DEMO_SEED_SHA256 and THINKAI_DEMO_SEED_VERSION are required.");
+  if (!databaseUrl || !sessionSecret || (demoSeedSha256&&!/^[a-f0-9]{64}$/i.test(demoSeedSha256))) throw new Error("THINKAI_DATABASE_URL and THINKAI_SESSION_SECRET are required; supplied seed SHA256 must be valid.");
   const allowStructuralTestContent = environment.THINKAI_RUNTIME_ACCEPTANCE_TEST === "1";
   if (allowStructuralTestContent && environment.NODE_ENV === "production") throw new Error("THINKAI_RUNTIME_ACCEPTANCE_TEST is forbidden in production.");
-  return { databaseUrl, sessionSecret, contentPath, demoSeedPath, demoSeedSha256: demoSeedSha256.toLowerCase(), demoSeedVersion, ...(allowStructuralTestContent ? { allowStructuralTestContent: true } : {}), ...(environment.THINKAI_DEMO_STAFF_BOOTSTRAP_SECRET ? { staffBootstrapSecret: environment.THINKAI_DEMO_STAFF_BOOTSTRAP_SECRET } : {}), cleanDemoActorId: actorId("actor_demo_clean"), historyDemoActorId: actorId("actor_demo_history") };
+  return { databaseUrl, sessionSecret, ...(contentPath?{contentPath}:{}),...(demoSeedPath?{demoSeedPath}:{}),...(demoSeedSha256?{demoSeedSha256:demoSeedSha256.toLowerCase()}:{}),...(demoSeedVersion?{demoSeedVersion}:{}), ...(allowStructuralTestContent ? { allowStructuralTestContent: true } : {}), ...(environment.THINKAI_DEMO_STAFF_BOOTSTRAP_SECRET ? { staffBootstrapSecret: environment.THINKAI_DEMO_STAFF_BOOTSTRAP_SECRET } : {}), cleanDemoActorId: actorId("actor_demo_clean"), historyDemoActorId: actorId("actor_demo_history") };
 }
 
 function sameSecret(expected: string, actual: string): boolean {

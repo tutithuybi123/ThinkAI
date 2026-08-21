@@ -23,7 +23,10 @@ services:
     expose: ["5432"]
   cloudflared:
     image: cloudflare/cloudflared:latest
-    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    command: >-
+      sh -c 'if [ "${THINKAI_TUNNEL_MODE:-quick}" = "quick" ]; then
+      cloudflared tunnel --no-autoupdate --url http://app:3000;
+      else cloudflared tunnel --no-autoupdate run --token "$${CLOUDFLARE_TUNNEL_TOKEN}"; fi'
     depends_on: [app]
     restart: unless-stopped
 volumes:
