@@ -1,0 +1,21 @@
+{
+  "recordedAt": "2026-08-21",
+  "deployment": {
+    "mode": "cloudflare_quick_tunnel",
+    "url": "https://glad-medications-teens-consistency.trycloudflare.com",
+    "services": ["app", "postgres", "cloudflared"],
+    "postgresPersistentVolume": "thinkai_thinkai-postgres",
+    "migrationCount": 7
+  },
+  "ai": {
+    "provider": "tokenrouter",
+    "model": "deepseek-v4-pro-0813",
+    "qualificationProbe": "success",
+    "fakeAdapters": "test/local only",
+    "openRouterFallback": "configuration-supported"
+  },
+  "limits": {
+    "teacherApprovedProductionContent": "not yet supplied",
+    "full learner content lifecycle E2E": "blocked pending approved content"
+  }
+}
