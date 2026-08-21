@@ -11,6 +11,7 @@ export interface ApiServices {
   skills(actor: ActorId): Promise<unknown>;
   progress(actor: ActorId): Promise<unknown>;
   audit(actor: ActorId, receiptId: string): Promise<unknown>;
+  health?():Promise<unknown>;
   startPublishedPractice?(actor:ActorId,revisionId:string):Promise<unknown>;
   readonly practice: any; readonly transfer: any; readonly receipts: any;
   readonly ops?: { createDraft(input:{id:any;body:any}):Promise<unknown>; get(id:string):Promise<unknown>; submitReview(id:string):Promise<unknown>; approve(id:string):Promise<unknown>; publish(id:string):Promise<unknown>; deprecate(id:string):Promise<unknown>; };
@@ -76,7 +77,7 @@ function answer(value: unknown): SubmittedAnswer | ApiResponse {
 }
 
 export async function dispatch(services: ApiServices, request: ApiRequest): Promise<ApiResponse> {
-  if (request.method === "GET" && request.path === "/healthz") return response(200, services.demo ? await services.demo.health() : { status:"ok", persistence:"unconfigured", ai:"disabled" });
+  if (request.method === "GET" && request.path === "/healthz") return response(200, services.health ? await services.health() : services.demo ? await services.demo.health() : { status:"ok", persistence:"unconfigured", ai:"disabled" });
   if (request.body !== undefined && !boundedJson(request.body)) return failure("INVALID_REQUEST", 400, "Request body exceeds structural limits.");
   const unauthenticatedBody = object(request.body);
   if (request.method === "POST" && request.path === "/api/v1/demo/session") {
