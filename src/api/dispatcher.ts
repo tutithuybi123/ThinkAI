@@ -14,6 +14,7 @@ export interface ApiServices {
   startPublishedPractice?(actor:ActorId,revisionId:string):Promise<unknown>;
   readonly practice: any; readonly transfer: any; readonly receipts: any;
   readonly ops?: { createDraft(input:{id:any;body:any}):Promise<unknown>; get(id:string):Promise<unknown>; submitReview(id:string):Promise<unknown>; approve(id:string):Promise<unknown>; publish(id:string):Promise<unknown>; deprecate(id:string):Promise<unknown>; };
+  readonly companion?: { respond(input:{learnerMessage:string;guidanceVersion:string;messageId:string}):Promise<unknown> };
   readonly demo?: { reset(input:{resetBy:ActorId;idempotencyKey:string}): unknown | Promise<unknown>; health(): unknown | Promise<unknown> };
   readonly sessionBootstrap?: {
     issueLearner(profile: "clean" | "history"): { token: string; actorId: ActorId; role: "learner" } | Promise<{ token: string; actorId: ActorId; role: "learner" }>;
@@ -129,6 +130,7 @@ export async function dispatch(services: ApiServices, request: ApiRequest): Prom
       return failure("INVALID_ATTEMPT", 400, "Attempt must be exactly kind: attempt or cannot_start.");
     }
     if (parts[2] === "challenges" && routeId(parts[3]) && parts[4] === "interventions" && routeId(parts[5])) return response(200, await services.practice.openReviewedHint({ sessionId: parts[3], actorId: actor.actorId, actorSessionId: actor.sessionId, interventionId: parts[5], idempotencyKey: key }));
+    if(parts[2]==="challenges"&&routeId(parts[3])&&parts[4]==="companion"){if(!services.companion||typeof body.message!=="string")return failure("AI_UNAVAILABLE",503,"Practice Companion is unavailable.");await services.practice.resume(parts[3],actor.actorId);return response(200,await services.companion.respond({learnerMessage:body.message,guidanceVersion:"runtime-v1",messageId:key}));}
     if (parts[2] === "challenges" && routeId(parts[3]) && parts[4] === "submissions") { const value = answer(body.answer); if (isApiResponse(value)) return value; if (body.reasoning !== undefined && !boundedString(body.reasoning, MAX_REASONING)) return failure("SUBMISSION_INVALID", 400, "Reasoning must be bounded text."); return response(200, await services.practice.submit({ sessionId: parts[3], actorId: actor.actorId, actorSessionId: actor.sessionId, answer: value, idempotencyKey: key })); }
     if (parts[2] === "challenges" && routeId(parts[3]) && parts[4] === "transfer" && parts[5] === "start" && routeId(String(body.sessionId ?? ""))) return response(201, await services.transfer.start({ sessionId: body.sessionId, practiceSessionId: parts[3], actorId: actor.actorId, actorSessionId: actor.sessionId, idempotencyKey: key }));
     if (parts[2] === "transfers" && routeId(parts[3]) && parts[4] === "submissions") { const value = answer(body.answer); if (isApiResponse(value)) return value; return response(200, await services.transfer.submit({ sessionId: parts[3], actorId: actor.actorId, actorSessionId: actor.sessionId, answer: value, idempotencyKey: key })); }

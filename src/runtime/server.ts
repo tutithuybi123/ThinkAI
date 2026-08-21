@@ -18,6 +18,7 @@ import { runMigrations } from "../persistence/migrations.js";
 import { PostgresContentRevisionRepository } from "../content/postgres-repository.js";
 import { OpsService } from "../ops/service.js";
 import { CONTENT_CONTRACT_VERSION } from "../domain/policies.js";
+import { LivePracticeCompanion } from "../ai/live-companion.js";
 
 export interface RuntimeConfiguration {
   readonly databaseUrl: string;
@@ -44,6 +45,7 @@ export interface ProductionRuntime {
   readonly demo: PostgresDemoService;
   readonly contentRevisions: PostgresContentRevisionRepository;
   readonly ops: OpsService;
+  readonly companion?: LivePracticeCompanion;
   startPublishedPractice(actor:ActorId,revisionId:string):Promise<unknown>;
   readonly sessionBootstrap: {
     issueLearner(profile: "clean" | "history"): Promise<{ token: string; actorId: ActorId; role: "learner" }>;
@@ -55,7 +57,7 @@ export interface ProductionRuntime {
   skills(actor: ActorId): Promise<unknown>;
   progress(actor: ActorId): Promise<unknown>;
   audit(auditor: ActorId, receiptId: string): Promise<unknown>;
-  health(): Promise<{ status: "ok"; persistence: "available"; ai: "disabled" }>;
+  health(): Promise<{ status: "ok"; persistence: "available"; ai: "disabled"|"configured" }>;
   close(): Promise<void>;
 }
 
@@ -76,6 +78,7 @@ export async function createProductionRuntime(config: RuntimeConfiguration): Pro
   const persistence = new PostgresTransactionalEvidencePersistence(client);
   const contentRevisions = new PostgresContentRevisionRepository(client);
   const ops = new OpsService(contentRevisions);
+  const companion = process.env.NODE_ENV === "production" ? new LivePracticeCompanion() : undefined;
   const scoring = new DeterministicScoringService();
   const signer = new SignedSessionService(config.sessionSecret);
   const auth = new PostgresSyntheticSessionRegistry(signer, client, [
@@ -96,6 +99,7 @@ export async function createProductionRuntime(config: RuntimeConfiguration): Pro
     demo,
     contentRevisions,
     ops,
+    ...(companion?{companion}:{}),
     async startPublishedPractice(actor:ActorId,revisionId:string){if(config.allowStructuralTestContent&&revisionId==="legacy_fixture"){const pair=content.selectApprovedPair();const sessionId=challengeSessionId(`challenge_${randomUUID().replaceAll("-","")}`);const started=await (new PracticeChallengeService(content,persistence,scoring)).start({sessionId,actorId:actor,idempotencyKey:`structural:${sessionId}`});return Object.freeze({sessionId:started.challenge.sessionId,microSkillRevisionId:revisionId,pairId:pair.id,pairVersion:pair.version,practiceTaskId:pair.practiceTaskId,practiceTaskVersion:content.getTask(pair.practiceTaskId).version});}const pair=await contentRevisions.selectInitialPublishedPair(actor,revisionId as never);const legacyPair=content.getReviewedPair(pair.id as never);const practiceTask=content.getTask(legacyPair.practiceTaskId);const transferTask=content.getTask(legacyPair.transferTaskId);if(legacyPair.version!==pair.version||legacyPair.practiceTaskId!==pair.practiceTask.id||legacyPair.transferTaskId!==pair.transferTask.id||practiceTask.version!==pair.practiceTask.version||transferTask.version!==pair.transferTask.version)throw Object.assign(new Error("Published content cannot be resolved by the Practice runtime."),{code:"CONTENT_INTEGRITY_FAILED"});const sessionId=challengeSessionId(`challenge_${randomUUID().replaceAll("-","")}`);const started=await (new PracticeChallengeService(content,persistence,scoring)).start({sessionId,actorId:actor,pairId:pair.id,idempotencyKey:`published:${revisionId}:${sessionId}`});return Object.freeze({sessionId:started.challenge.sessionId,microSkillRevisionId:revisionId,pairId:pair.id,pairVersion:pair.version,practiceTaskId:pair.practiceTask.id,practiceTaskVersion:pair.practiceTask.version});},
     sessionBootstrap: {
       async issueLearner(profile: "clean" | "history"): Promise<{ token: string; actorId: ActorId; role: "learner" }> {
@@ -123,7 +127,7 @@ export async function createProductionRuntime(config: RuntimeConfiguration): Pro
       if (!receipt) throw Object.assign(new Error("Capability receipt was not found."), { code: "RECEIPT_NOT_FOUND" });
       return { receiptEvent: receipt, history: rebuildHistory(events.filter((stored) => stored.event.actorId === receipt.event.actorId)) };
     },
-    async health() { return demo.health(); },
+    async health() { return {...await demo.health(),ai:(companion?"configured":"disabled") as "configured"|"disabled"}; },
     async close() { await client.close(); },
   });
 }

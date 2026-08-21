@@ -15,6 +15,7 @@ export function apiServicesFromRuntime(runtime: ProductionRuntime): ApiServices 
     startPublishedPractice: runtime.startPublishedPractice,
     demo: runtime.demo,
     ops: runtime.ops,
+    ...(runtime.companion?{companion:runtime.companion}:{}),
     sessionBootstrap: runtime.sessionBootstrap,
     ...(runtime.onDemoReset === undefined ? {} : { onDemoReset: runtime.onDemoReset }),
   };
