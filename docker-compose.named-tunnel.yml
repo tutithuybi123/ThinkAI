@@ -1,0 +1,3 @@
+services:
+  cloudflared:
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
