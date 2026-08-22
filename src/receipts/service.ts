@@ -65,6 +65,7 @@ export class CapabilityReceiptService {
     if (!receipt) throw Object.assign(new Error("Capability receipt was not found."), { code: "RECEIPT_NOT_FOUND" });
     return receipt;
   }
+  public async learnerView(input:{id:string;actorId:ActorId}){const receipt=await this.get(input);return Object.freeze({id:receipt.id,claim:receipt.claim,observedConditions:receipt.observedConditions,unknownConditions:receipt.unknownConditions,issuedAt:receipt.issuedAt});}
   public async issue(input:{actorId:ActorId;practiceSessionId:ChallengeSessionId;transferSessionId:TransferSessionId;idempotencyKey:string;actorSessionId?:string}):Promise<{replayed:boolean;receipt:CapabilityReceipt}> {
     const events = await this.persistence.list(input.actorId);
     const practice = events.findLast((item) => item.event.type === "practice_scored" && item.event.challengeSessionId === input.practiceSessionId && item.event.payload.outcome === "correct")?.event;
