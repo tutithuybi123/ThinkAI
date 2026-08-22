@@ -19,6 +19,8 @@ import { PostgresContentRevisionRepository } from "../content/postgres-repositor
 import { OpsService } from "../ops/service.js";
 import { CONTENT_CONTRACT_VERSION } from "../domain/policies.js";
 import { LivePracticeCompanion } from "../ai/live-companion.js";
+import { assertPublishedEvidenceIdentity, deriveLearnerDiscovery } from "./learner-discovery.js";
+import type { ContentAggregate } from "../content/v11-validator.js";
 
 export interface RuntimeConfiguration {
   readonly databaseUrl: string;
@@ -100,7 +102,7 @@ export async function createProductionRuntime(config: RuntimeConfiguration): Pro
     contentRevisions,
     ops,
     ...(companion?{companion}:{}),
-    async startPublishedPractice(actor:ActorId,revisionId:string){if(config.allowStructuralTestContent&&revisionId==="legacy_fixture"){const pair=content.selectApprovedPair();const sessionId=challengeSessionId(`challenge_${randomUUID().replaceAll("-","")}`);const started=await (new PracticeChallengeService(content,persistence,scoring)).start({sessionId,actorId:actor,idempotencyKey:`structural:${sessionId}`});return Object.freeze({sessionId:started.challenge.sessionId,microSkillRevisionId:revisionId,pairId:pair.id,pairVersion:pair.version,practiceTaskId:pair.practiceTaskId,practiceTaskVersion:content.getTask(pair.practiceTaskId).version});}const pair=await contentRevisions.selectInitialPublishedPair(actor,revisionId as never);const legacyPair=content.getReviewedPair(pair.id as never);const practiceTask=content.getTask(legacyPair.practiceTaskId);const transferTask=content.getTask(legacyPair.transferTaskId);if(legacyPair.version!==pair.version||legacyPair.practiceTaskId!==pair.practiceTask.id||legacyPair.transferTaskId!==pair.transferTask.id||practiceTask.version!==pair.practiceTask.version||transferTask.version!==pair.transferTask.version)throw Object.assign(new Error("Published content cannot be resolved by the Practice runtime."),{code:"CONTENT_INTEGRITY_FAILED"});const sessionId=challengeSessionId(`challenge_${randomUUID().replaceAll("-","")}`);const started=await (new PracticeChallengeService(content,persistence,scoring)).start({sessionId,actorId:actor,pairId:pair.id,idempotencyKey:`published:${revisionId}:${sessionId}`});return Object.freeze({sessionId:started.challenge.sessionId,microSkillRevisionId:revisionId,pairId:pair.id,pairVersion:pair.version,practiceTaskId:pair.practiceTask.id,practiceTaskVersion:pair.practiceTask.version});},
+    async startPublishedPractice(actor:ActorId,revisionId:string){if(config.allowStructuralTestContent&&revisionId==="legacy_fixture"){const pair=content.selectApprovedPair();const sessionId=challengeSessionId(`challenge_${randomUUID().replaceAll("-","")}`);const started=await (new PracticeChallengeService(content,persistence,scoring)).start({sessionId,actorId:actor,idempotencyKey:`structural:${sessionId}`});return Object.freeze({sessionId:started.challenge.sessionId,microSkillRevisionId:revisionId,pairId:pair.id,pairVersion:pair.version,practiceTaskId:pair.practiceTaskId,practiceTaskVersion:content.getTask(pair.practiceTaskId).version});}const revision=await contentRevisions.getRevision<ContentAggregate>(revisionId as never);const node=revision?.lifecycle==="PUBLISHED"?revision.body.microSkills.find(item=>item.microSkill.revisionId===revisionId):undefined;if(!node)throw Object.assign(new Error("Published content cannot be resolved by the Practice runtime."),{code:"CONTENT_INTEGRITY_FAILED"});const pair=await contentRevisions.selectInitialPublishedPair(actor,revisionId as never);const legacyPair=content.getReviewedPair(pair.id as never);const practiceTask=content.getTask(legacyPair.practiceTaskId);const transferTask=content.getTask(legacyPair.transferTaskId);assertPublishedEvidenceIdentity(node,legacyPair.skillId);if(legacyPair.version!==pair.version||legacyPair.practiceTaskId!==pair.practiceTask.id||legacyPair.transferTaskId!==pair.transferTask.id||practiceTask.version!==pair.practiceTask.version||transferTask.version!==pair.transferTask.version)throw Object.assign(new Error("Published content cannot be resolved by the Practice runtime."),{code:"CONTENT_INTEGRITY_FAILED"});const sessionId=challengeSessionId(`challenge_${randomUUID().replaceAll("-","")}`);const started=await (new PracticeChallengeService(content,persistence,scoring)).start({sessionId,actorId:actor,pairId:pair.id,idempotencyKey:`published:${revisionId}:${sessionId}`});return Object.freeze({sessionId:started.challenge.sessionId,microSkillRevisionId:revisionId,pairId:pair.id,pairVersion:pair.version,practiceTaskId:pair.practiceTask.id,practiceTaskVersion:pair.practiceTask.version});},
     sessionBootstrap: {
       async issueLearner(profile: "clean" | "history"): Promise<{ token: string; actorId: ActorId; role: "learner" }> {
         const actor = profile === "clean" ? config.cleanDemoActorId : config.historyDemoActorId;
@@ -112,14 +114,8 @@ export async function createProductionRuntime(config: RuntimeConfiguration): Pro
         return { token: await auth.issue(actor, 15 * 60 * 1000), actorId: actor, role: input.role };
       },
     },
-    async home(actor: ActorId) { return { actorId: actor, progress: rebuildLearnerProgress(await persistence.list(actor)) }; },
-    async skills(_actor: ActorId) {
-      const published = await contentRevisions.listPublishedHierarchy();
-      if (published.length) return { active: published.flatMap((revision) => revision.body.microSkills.map((node) => ({ microSkillId: node.microSkill.id, microSkillRevisionId: node.microSkill.revisionId, displayOrder: node.microSkill.displayOrder }))), locked: [] };
-      if (!config.allowStructuralTestContent) throw Object.assign(new Error("No published content revision is available."), { code: "CONTENT_INTEGRITY_FAILED" });
-      const pair = content.selectApprovedPair();
-      return { active: [{ skillId: pair.skillId, microSkillRevisionId:"legacy_fixture", pairId: pair.id, pairVersion: pair.version }], locked: [] };
-    },
+    async home(actor: ActorId) { return { actorId: actor, ...deriveLearnerDiscovery(await contentRevisions.listActivePublishedMicroSkills(), await persistence.list(actor)) }; },
+    async skills(actor: ActorId) { return deriveLearnerDiscovery(await contentRevisions.listActivePublishedMicroSkills(), await persistence.list(actor)); },
     async progress(actor: ActorId) { return rebuildLearnerProgress(await persistence.list(actor)); },
     async audit(_auditor: ActorId, receiptId: string) {
       const events = await persistence.list();

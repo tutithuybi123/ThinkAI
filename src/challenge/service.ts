@@ -108,7 +108,7 @@ interface ChallengeState {
 export interface StartPracticeChallengeCommand {
   readonly sessionId: ChallengeSessionId;
   readonly actorId: ActorId;
-  /** Deprecated compatibility field. Server policy deliberately ignores it. */
+  /** A server-selected reviewed pair. Browser routes never supply this field. */
   readonly pairId?: TaskPairId;
   readonly idempotencyKey: string;
   readonly actorSessionId?: string;
@@ -258,7 +258,7 @@ export class PracticeChallengeService {
   public async start(command: StartPracticeChallengeCommand): Promise<PracticeChallengeCommandResult> {
     requireNonEmpty(command.idempotencyKey, "idempotencyKey");
     const existing = await this.persistence.find(command.sessionId);
-    const pair = this.content.selectApprovedPair();
+    const pair = command.pairId === undefined ? this.content.selectApprovedPair() : this.content.getReviewedPair(command.pairId);
     const fingerprint = JSON.stringify({ action: "start", actorId: command.actorId, pairId: pair.id, pairVersion: pair.version });
     if (existing) return this.replayExisting(command.sessionId, command.actorId, existing, command.idempotencyKey, fingerprint);
 

@@ -99,7 +99,7 @@ export async function dispatch(services: ApiServices, request: ApiRequest): Prom
     if (request.method === "GET" && request.path === "/api/v1/home") return response(200, await services.home(actor.actorId));
     if (request.method === "GET" && request.path === "/api/v1/skills") return response(200, await services.skills(actor.actorId));
     if (request.method === "GET" && request.path === "/api/v1/progress") return response(200, await services.progress(actor.actorId));
-    if (request.method === "POST" && request.path === "/api/v1/practice/start" && typeof body?.microSkillRevisionId === "string" && services.startPublishedPractice) return response(201,await services.startPublishedPractice(actor.actorId,body.microSkillRevisionId));
+    if (request.method === "POST" && request.path === "/api/v1/practice/start" && typeof body?.microSkillRevisionId === "string" && services.startPublishedPractice) { const key=mutationKey(request); if(typeof key!=="string")return key; return response(201,await services.startPublishedPractice(actor.actorId,body.microSkillRevisionId)); }
     if (parts[2] === "ops") {
       if (actor.role !== "presenter" && actor.role !== "auditor") return failure("FORBIDDEN",403,"Content operations require staff authorization.");
       if (!services.ops) return failure("NOT_FOUND",404,"Content operations are unavailable.");

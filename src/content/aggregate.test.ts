@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { actorId, contentRevisionId, microSkillId, subjectId, taskId, taskPairId, topicId } from "../domain/ids.js";
+import { actorId, contentRevisionId, microSkillId, skillId, subjectId, taskId, taskPairId, topicId } from "../domain/ids.js";
 import { selectFreshTransferPair, selectInitialPair } from "./selection.js";
 import { validateContentAggregate } from "./v11-validator.js";
 import { createAggregatePairSnapshot } from "./snapshot.js";
@@ -10,11 +10,11 @@ import { assertPublishableContent, publishReviewedAggregate, validatePublishable
 import { approveRevision, createDraftRevision, submitForReview } from "./lifecycle.js";
 
 const assessment = { expectedResult: "2", gradingShape: { finalAnswerFacet: "required" as const, reasoningFacet: "required" as const, requiredCriterionIds: ["method"], optionalCriterionIds: [] }, criteria: [{ id: "method", description: "method" }], referenceSolutions: [{ format: "plain_text" as const, body: "alternate" }], commonMisconceptions: ["swap"], aiGuidance: { version: "g1", allowedSupportLevels: ["PROMPT"] as const } };
-const pair = (id: string, transfer = `task_${id}_transfer`) => { const practiceId = taskId(`task_${id}_practice`); const transferId = taskId(transfer); return { id: taskPairId(`pair_${id}`), version: "1", microSkillRevisionId: contentRevisionId("revision_gradient_1"), practiceTask: { id: practiceId, version: "1", role: "practice" as const }, transferTask: { id: transferId, version: "1", role: "transfer" as const }, practiceContent: { id: practiceId, version: "1", role: "practice" as const, prompt: { format: "plain_text" as const, body: "practice" }, answerSpec: { kind: "written_solution" as const, assessment } }, transferContent: { id: transferId, version: "1", role: "transfer" as const, prompt: { format: "plain_text" as const, body: "transfer" }, answerSpec: { kind: "exact_text" as const, accepted: ["2"], normalizationVersion: "v1" } }, connectionReveal: { id: "reveal_a", version: "1", pairId: taskPairId(`pair_${id}`), pairVersion: "1", title: "relation", sharedRelation: "same", explanation: { format: "plain_text" as const, body: "same idea" } } }; };
-const base = () => ({ subject: { id: subjectId("subject_math"), displayOrder: 1 }, topic: { id: topicId("topic_linear"), subjectId: subjectId("subject_math"), displayOrder: 1 }, microSkill: { id: microSkillId("micro_gradient"), topicId: topicId("topic_linear"), revisionId: contentRevisionId("revision_gradient_1"), displayOrder: 1, prerequisiteMicroSkillIds: [] }, pairs: [pair("a"), pair("b")] });
+const pair = (id: string, transfer = `task_${id}_transfer`) => { const practiceId = taskId(`task_${id}_practice`); const transferId = taskId(transfer); const evidenceSkillId = skillId("skill_gradient_evidence"); return { id: taskPairId(`pair_${id}`), version: "1", microSkillRevisionId: contentRevisionId("revision_gradient_1"), practiceTask: { id: practiceId, version: "1", role: "practice" as const }, transferTask: { id: transferId, version: "1", role: "transfer" as const }, practiceContent: { id: practiceId, version: "1", skillId: evidenceSkillId, role: "practice" as const, prompt: { format: "plain_text" as const, body: "practice" }, answerSpec: { kind: "written_solution" as const, assessment } }, transferContent: { id: transferId, version: "1", skillId: evidenceSkillId, role: "transfer" as const, prompt: { format: "plain_text" as const, body: "transfer" }, answerSpec: { kind: "exact_text" as const, accepted: ["2"], normalizationVersion: "v1" } }, connectionReveal: { id: "reveal_a", version: "1", pairId: taskPairId(`pair_${id}`), pairVersion: "1", title: "relation", sharedRelation: "same", explanation: { format: "plain_text" as const, body: "same idea" } } }; };
+const base = () => ({ subject: { id: subjectId("subject_math"), label: "Toán 10", displayOrder: 1 }, topic: { id: topicId("topic_linear"), subjectId: subjectId("subject_math"), label: "Hàm số bậc nhất", displayOrder: 1 }, microSkill: { id: microSkillId("micro_gradient"), evidenceSkillId: skillId("skill_gradient_evidence"), topicId: topicId("topic_linear"), revisionId: contentRevisionId("revision_gradient_1"), title: "Tìm hệ số góc", displayOrder: 1, prerequisiteMicroSkillIds: [] }, pairs: [pair("a"), pair("b")] });
 
 test("validates multi-node authored progression and rejects cycles", () => {
-  const a = base(); const b = { ...base(), microSkill: { ...base().microSkill, id: microSkillId("micro_intercept"), revisionId: contentRevisionId("revision_intercept_1"), prerequisiteMicroSkillIds: [a.microSkill.id] }, pairs: [] };
+  const a = base(); const b = { ...base(), microSkill: { ...base().microSkill, id: microSkillId("micro_intercept"), evidenceSkillId: skillId("skill_intercept_evidence"), revisionId: contentRevisionId("revision_intercept_1"), prerequisiteMicroSkillIds: [a.microSkill.id] }, pairs: [] };
   assert.deepEqual(validateContentAggregate({ microSkills: [a, b] }), []);
   assert.match(validateContentAggregate({ microSkills: [a, { ...b, microSkill: { ...b.microSkill, prerequisiteMicroSkillIds: [a.microSkill.id, a.microSkill.id] } }] })[0]!.code, /DUPLICATE/);
   const cyclic = { ...a, microSkill: { ...a.microSkill, prerequisiteMicroSkillIds: [b.microSkill.id] } };
@@ -22,7 +22,7 @@ test("validates multi-node authored progression and rejects cycles", () => {
 });
 
 test("ContentBundle validates the authored graph as a containing aggregate", () => {
-  const a = base(); const b = { ...base(), microSkill: { ...base().microSkill, id: microSkillId("micro_intercept"), revisionId: contentRevisionId("revision_intercept_1"), prerequisiteMicroSkillIds: [a.microSkill.id] }, pairs: [] };
+  const a = base(); const b = { ...base(), microSkill: { ...base().microSkill, id: microSkillId("micro_intercept"), evidenceSkillId: skillId("skill_intercept_evidence"), revisionId: contentRevisionId("revision_intercept_1"), prerequisiteMicroSkillIds: [a.microSkill.id] }, pairs: [] };
   assert.equal(validateContentBundle({ ...packageAStructuralFixture, contentAggregate: { microSkills: [a, b] } }).valid, true);
   assert.equal(validateContentBundle({ ...packageAStructuralFixture, contentAggregate: { microSkills: [{ ...a, microSkill: { ...a.microSkill, prerequisiteMicroSkillIds: [microSkillId("micro_unknown")] } }] } }).valid, false);
 });
@@ -37,7 +37,7 @@ test("aggregate snapshot deep-freezes the selected pair and authored identity", 
   assert.equal(Object.isFrozen(snapshot.pair), true);
   assert.equal(snapshot.authoredAggregate.pairs[0]!.id, selected.id);
   (aggregate.microSkill as { title?: string }).title = "later draft edit";
-  assert.equal((snapshot.authoredAggregate.microSkill as { title?: string }).title, undefined);
+  assert.equal((snapshot.authoredAggregate.microSkill as { title?: string }).title, "Tìm hệ số góc");
   assert.equal((snapshot.pair.practiceContent.answerSpec as { assessment: { aiGuidance: { version: string } } }).assessment.aiGuidance.version, "g1");
   assert.equal(Object.isFrozen(snapshot.pair.practiceContent), true);
   assert.throws(() => ((snapshot.pair.practiceContent.answerSpec as unknown as { assessment: { referenceSolutions: unknown[] } }).assessment.referenceSolutions.push("blocked")));
@@ -65,4 +65,24 @@ test("draft aggregates may be incomplete but publication requires a complete pai
 
 test("malformed aggregate data fails closed instead of throwing", () => {
   assert.doesNotThrow(() => assert.notEqual(validateContentAggregate({ microSkills: [{ microSkill: { prerequisiteMicroSkillIds: "bad" }, pairs: [] }] } as unknown).length, 0));
+});
+
+test("requires reviewed learner-facing labels for the published hierarchy", () => {
+  const node = base();
+  assert.equal(validateContentAggregate({ microSkills: [node] }).length, 0);
+  assert.notEqual(validateContentAggregate({ microSkills: [{ ...node, subject: { id: node.subject.id, displayOrder: node.subject.displayOrder } }] }).length, 0);
+});
+
+test("requires a valid server-only evidence skill identity instead of guessing from the authored id", () => {
+  const node = base();
+  assert.notEqual(String(node.microSkill.id), String(node.microSkill.evidenceSkillId));
+  assert.equal(validateContentAggregate({ microSkills: [node] }).length, 0);
+  assert.equal(validateContentAggregate({ microSkills: [{ ...node, microSkill: { ...node.microSkill, evidenceSkillId: "micro_gradient" } }] }).some((issue) => issue.code === "INVALID_EVIDENCE_SKILL_ID"), true);
+  assert.equal(validateContentAggregate({ microSkills: [{ ...node, microSkill: { ...node.microSkill, evidenceSkillId: undefined } }] }).some((issue) => issue.code === "MISSING_EVIDENCE_SKILL_ID"), true);
+});
+
+test("fails publication validation when a reviewed pair writes evidence for another skill", () => {
+  const node = base();
+  const mismatched = { ...node, pairs: [{ ...node.pairs[0]!, practiceContent: { ...node.pairs[0]!.practiceContent, skillId: skillId("skill_other_evidence") } }] };
+  assert.equal(validateContentAggregate({ microSkills: [mismatched] }).some((issue) => issue.code === "EVIDENCE_SKILL_PAIR_MISMATCH"), true);
 });
