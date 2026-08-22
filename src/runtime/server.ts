@@ -1,7 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { timingSafeEqual } from "node:crypto";
 import { createHash } from "node:crypto";
-import { randomUUID } from "node:crypto";
 
 import { PostgresSyntheticSessionRegistry, SignedSessionService, type SessionAuthenticator } from "../auth/session.js";
 import { ReviewedContentRepository } from "../content/repository.js";
@@ -19,8 +18,13 @@ import { PostgresContentRevisionRepository } from "../content/postgres-repositor
 import { OpsService } from "../ops/service.js";
 import { CONTENT_CONTRACT_VERSION } from "../domain/policies.js";
 import { LivePracticeCompanion } from "../ai/live-companion.js";
+import { LivePracticeProcessFeedback } from "../ai/live-process-feedback.js";
+import { assistanceEvidence } from "../assistance/evidence.js";
+import type { AssistanceRecord } from "../assistance/contracts.js";
+import { evidenceEventId, type ChallengeSessionId } from "../domain/ids.js";
 import { assertPublishedEvidenceIdentity, deriveLearnerDiscovery } from "./learner-discovery.js";
-import type { ContentAggregate } from "../content/v11-validator.js";
+import { derivePracticeNextAction } from "../challenge/practice-gate.js";
+import { selectFreshPracticePair } from "../content/selection.js";
 
 export interface RuntimeConfiguration {
   readonly databaseUrl: string;
@@ -48,7 +52,11 @@ export interface ProductionRuntime {
   readonly contentRevisions: PostgresContentRevisionRepository;
   readonly ops: OpsService;
   readonly companion?: LivePracticeCompanion;
-  startPublishedPractice(actor:ActorId,revisionId:string):Promise<unknown>;
+  practiceCompanion(actor:ActorId,sessionId:ChallengeSessionId,input:{message:string;idempotencyKey:string;actorSessionId:string}):Promise<{delivery?:string}>;
+  practiceLearnerView(actor:ActorId,sessionId:ChallengeSessionId):Promise<unknown>;
+  advancePractice(actor:ActorId,sessionId:ChallengeSessionId,idempotencyKey:string):Promise<unknown>;
+  practiceProcessFeedback(actor:ActorId,sessionId:ChallengeSessionId):Promise<{message?:string}>;
+  startPublishedPractice(actor:ActorId,revisionId:string,idempotencyKey:string):Promise<unknown>;
   readonly sessionBootstrap: {
     issueLearner(profile: "clean" | "history"): Promise<{ token: string; actorId: ActorId; role: "learner" }>;
     issueStaff(input: { readonly role: "presenter" | "auditor"; readonly secret: string }): Promise<{ token: string; actorId: ActorId; role: "presenter" | "auditor" }>;
@@ -81,6 +89,7 @@ export async function createProductionRuntime(config: RuntimeConfiguration): Pro
   const contentRevisions = new PostgresContentRevisionRepository(client);
   const ops = new OpsService(contentRevisions);
   const companion = process.env.NODE_ENV === "production" ? new LivePracticeCompanion() : undefined;
+  const processFeedback = process.env.NODE_ENV === "production" ? new LivePracticeProcessFeedback() : undefined;
   const scoring = new DeterministicScoringService();
   const signer = new SignedSessionService(config.sessionSecret);
   const auth = new PostgresSyntheticSessionRegistry(signer, client, [
@@ -92,17 +101,39 @@ export async function createProductionRuntime(config: RuntimeConfiguration): Pro
   await auth.initialize();
   const receipts = new CapabilityReceiptService(persistence);
   const demo = new PostgresDemoService(client, config.cleanDemoActorId);
+  const practice = new PracticeChallengeService(content, persistence, scoring);
   if(rawSeed) await demo.initialize(rawSeed);
   return Object.freeze({
     auth,
-    practice: new PracticeChallengeService(content, persistence, scoring),
+    practice,
     transfer: new TransferService(content, persistence, scoring),
     receipts,
     demo,
     contentRevisions,
     ops,
     ...(companion?{companion}:{}),
-    async startPublishedPractice(actor:ActorId,revisionId:string){if(config.allowStructuralTestContent&&revisionId==="legacy_fixture"){const pair=content.selectApprovedPair();const sessionId=challengeSessionId(`challenge_${randomUUID().replaceAll("-","")}`);const started=await (new PracticeChallengeService(content,persistence,scoring)).start({sessionId,actorId:actor,idempotencyKey:`structural:${sessionId}`});return Object.freeze({sessionId:started.challenge.sessionId,microSkillRevisionId:revisionId,pairId:pair.id,pairVersion:pair.version,practiceTaskId:pair.practiceTaskId,practiceTaskVersion:content.getTask(pair.practiceTaskId).version});}const revision=await contentRevisions.getRevision<ContentAggregate>(revisionId as never);const node=revision?.lifecycle==="PUBLISHED"?revision.body.microSkills.find(item=>item.microSkill.revisionId===revisionId):undefined;if(!node)throw Object.assign(new Error("Published content cannot be resolved by the Practice runtime."),{code:"CONTENT_INTEGRITY_FAILED"});const pair=await contentRevisions.selectInitialPublishedPair(actor,revisionId as never);const legacyPair=content.getReviewedPair(pair.id as never);const practiceTask=content.getTask(legacyPair.practiceTaskId);const transferTask=content.getTask(legacyPair.transferTaskId);assertPublishedEvidenceIdentity(node,legacyPair.skillId);if(legacyPair.version!==pair.version||legacyPair.practiceTaskId!==pair.practiceTask.id||legacyPair.transferTaskId!==pair.transferTask.id||practiceTask.version!==pair.practiceTask.version||transferTask.version!==pair.transferTask.version)throw Object.assign(new Error("Published content cannot be resolved by the Practice runtime."),{code:"CONTENT_INTEGRITY_FAILED"});const sessionId=challengeSessionId(`challenge_${randomUUID().replaceAll("-","")}`);const started=await (new PracticeChallengeService(content,persistence,scoring)).start({sessionId,actorId:actor,pairId:pair.id,idempotencyKey:`published:${revisionId}:${sessionId}`});return Object.freeze({sessionId:started.challenge.sessionId,microSkillRevisionId:revisionId,pairId:pair.id,pairVersion:pair.version,practiceTaskId:pair.practiceTask.id,practiceTaskVersion:pair.practiceTask.version});},
+    async practiceCompanion(actor:ActorId,sessionId:ChallengeSessionId,input:{message:string;idempotencyKey:string;actorSessionId:string}){
+      if(!companion) throw Object.assign(new Error("Practice Companion is unavailable."),{code:"AI_UNAVAILABLE"});
+      const challenge=await practice.resume(sessionId,actor);
+      const delivered=await companion.respond({learnerMessage:input.message,guidanceVersion:"runtime-v1",messageId:input.idempotencyKey});
+      const eventId=evidenceEventId(`event_${createHash("sha256").update(`${sessionId}|${input.idempotencyKey}|assistance`).digest("hex").slice(0,32)}`);
+      await persistence.appendCommand({events:[assistanceEvidence({id:eventId,actorId:actor,challengeSessionId:sessionId,skillId:challenge.skillId,taskId:challenge.taskId,taskVersion:challenge.taskVersion,taskFamilyId:challenge.taskFamilyId,record:delivered.record as AssistanceRecord,guidanceVersion:"runtime-v1",occurredAt:(delivered.record as AssistanceRecord).occurredAt,provider:delivered.provider,model:delivered.model})],idempotencyKey:`companion:${sessionId}:${input.idempotencyKey}`,actorSessionId:input.actorSessionId});
+      return delivered.delivery?{delivery:delivered.delivery}:{};
+    },
+    async practiceLearnerView(actor:ActorId,sessionId:ChallengeSessionId){
+      const raw=await practice.learnerView(sessionId,actor); const challenge=await practice.resume(sessionId,actor); const nodes=await contentRevisions.listActivePublishedMicroSkills(); const node=nodes.find(item=>item.pairs.some(pair=>pair.id===challenge.pairId&&pair.version===challenge.pairVersion)); if(!node||!node.practiceGate)throw Object.assign(new Error("Practice gate is unavailable."),{code:"CONTENT_INTEGRITY_FAILED"});
+      const events=await persistence.list(actor); const scored=events.filter(item=>item.event.type==="practice_scored"&&item.event.skillId===challenge.skillId).map(item=>({pairId:String(item.event.payload.pairId??""),pairVersion:String(item.event.payload.pairVersion??""),taskId:String(item.event.taskId??""),taskVersion:String(item.event.taskVersion??""),outcome:String(item.event.payload.gradingOutcome??"UNCERTAIN") as "CORRECT"|"PARTIALLY_CORRECT"|"INCORRECT"|"UNCERTAIN"})).filter(item=>item.pairId); const nextAction=derivePracticeNextAction(node.practiceGate,scored); return {...raw,progress:{ordinal:Math.min(scored.length+1,node.practiceGate.maxPracticeItems),label:"Bài luyện hiện tại"},nextAction};
+    },
+    async advancePractice(actor:ActorId,sessionId:ChallengeSessionId,idempotencyKey:string){
+      const challenge=await practice.resume(sessionId,actor); const view=await this.practiceLearnerView(actor,sessionId) as {nextAction:string}; if(view.nextAction!=="CONTINUE_PRACTICE")return {nextAction:view.nextAction}; const node=(await contentRevisions.listActivePublishedMicroSkills()).find(item=>item.pairs.some(pair=>pair.id===challenge.pairId&&pair.version===challenge.pairVersion)); if(!node||!node.practiceGate)throw Object.assign(new Error("Practice gate is unavailable."),{code:"CONTENT_INTEGRITY_FAILED"}); const events=await persistence.list(actor); const exposed=events.filter(item=>item.event.type==="challenge_started"&&item.event.skillId===challenge.skillId).map(item=>({pairId:String(item.event.payload.pairId),pairVersion:String(item.event.payload.pairVersion)})); const selected=selectFreshPracticePair({actorId:actor,microSkillRevisionId:node.microSkill.revisionId,ordinal:exposed.length+1,eligiblePairs:node.pairs,exposedPairs:exposed as any}); if(selected.kind!=="PAIR_SELECTED")return {nextAction:"PRACTICE_RECOVERY"}; const nextSession=challengeSessionId(`challenge_${createHash("sha256").update(`${sessionId}|${idempotencyKey}|next`).digest("hex").slice(0,32)}`); const started=await practice.start({sessionId:nextSession,actorId:actor,pairId:selected.pair.id,idempotencyKey:`next:${idempotencyKey}`}); return {nextAction:"CONTINUE_PRACTICE",sessionId:started.challenge.sessionId};
+    },
+    async practiceProcessFeedback(actor:ActorId,sessionId:ChallengeSessionId){
+      const challenge=await practice.resume(sessionId,actor);
+      if(!challenge.lastOutcome)return {};
+      if(!processFeedback)return {};
+      try{const delivered=await processFeedback.deliver({practiceAnswer:"Learner submitted a Practice response.",assistanceCount:challenge.openedInterventionIds.length,taskVersion:challenge.taskVersion,rubricVersion:"runtime-v1",evaluatorVersion:"runtime-v1"});if(delivered.message){const id=evidenceEventId(`event_${createHash("sha256").update(`${sessionId}|process-feedback`).digest("hex").slice(0,32)}`);await persistence.appendCommand({idempotencyKey:`process-feedback:${sessionId}`,events:[{id,type:"practice_process_feedback_recorded",actorId:actor,correlationId:sessionId,challengeSessionId:sessionId,skillId:challenge.skillId,taskId:challenge.taskId,taskVersion:challenge.taskVersion,taskFamilyId:challenge.taskFamilyId,occurredAt:new Date().toISOString(),schemaVersion:1,policyVersion:"process-feedback/v1",provenance:"live",payload:{provider:delivered.provider,model:delivered.model,contentVersion:challenge.taskVersion}}]});}return delivered;}catch{return {};}
+    },
+    async startPublishedPractice(actor:ActorId,revisionId:string,idempotencyKey:string){const sessionId=challengeSessionId(`challenge_${createHash("sha256").update(`${actor}|${revisionId}|${idempotencyKey}`).digest("hex").slice(0,32)}`);if(config.allowStructuralTestContent&&revisionId==="legacy_fixture"){const pair=content.selectApprovedPair();const started=await practice.start({sessionId,actorId:actor,pairId:pair.id,idempotencyKey:`start:${idempotencyKey}`});return Object.freeze({sessionId:started.challenge.sessionId,microSkillRevisionId:revisionId});}const node=await contentRevisions.activeMicroSkill(revisionId as never);const pair=await contentRevisions.selectInitialPublishedPair(actor,revisionId as never);const legacyPair=content.getReviewedPair(pair.id as never);const practiceTask=content.getTask(legacyPair.practiceTaskId);const transferTask=content.getTask(legacyPair.transferTaskId);assertPublishedEvidenceIdentity(node,legacyPair.skillId);if(legacyPair.version!==pair.version||legacyPair.practiceTaskId!==pair.practiceTask.id||legacyPair.transferTaskId!==pair.transferTask.id||practiceTask.version!==pair.practiceTask.version||transferTask.version!==pair.transferTask.version)throw Object.assign(new Error("Published content cannot be resolved by the Practice runtime."),{code:"CONTENT_INTEGRITY_FAILED"});const started=await practice.start({sessionId,actorId:actor,pairId:pair.id,idempotencyKey:`start:${idempotencyKey}`});return Object.freeze({sessionId:started.challenge.sessionId,microSkillRevisionId:revisionId});},
     sessionBootstrap: {
       async issueLearner(profile: "clean" | "history"): Promise<{ token: string; actorId: ActorId; role: "learner" }> {
         const actor = profile === "clean" ? config.cleanDemoActorId : config.historyDemoActorId;

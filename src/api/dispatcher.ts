@@ -12,7 +12,11 @@ export interface ApiServices {
   progress(actor: ActorId): Promise<unknown>;
   audit(actor: ActorId, receiptId: string): Promise<unknown>;
   health?():Promise<unknown>;
-  startPublishedPractice?(actor:ActorId,revisionId:string):Promise<unknown>;
+  startPublishedPractice?(actor:ActorId,revisionId:string,idempotencyKey:string):Promise<unknown>;
+  practiceCompanion?(actor:ActorId,sessionId:any,input:{message:string;idempotencyKey:string;actorSessionId:string}):Promise<{delivery?:string}>;
+  practiceLearnerView?(actor:ActorId,sessionId:any):Promise<unknown>;
+  advancePractice?(actor:ActorId,sessionId:any,idempotencyKey:string):Promise<unknown>;
+  practiceProcessFeedback?(actor:ActorId,sessionId:any):Promise<{message?:string}>;
   readonly practice: any; readonly transfer: any; readonly receipts: any;
   readonly ops?: { createDraft(input:{id:any;body:any}):Promise<unknown>; get(id:string):Promise<unknown>; submitReview(id:string):Promise<unknown>; approve(id:string):Promise<unknown>; publish(id:string):Promise<unknown>; deprecate(id:string):Promise<unknown>; };
   readonly companion?: { respond(input:{learnerMessage:string;guidanceVersion:string;messageId:string}):Promise<unknown> };
@@ -99,7 +103,7 @@ export async function dispatch(services: ApiServices, request: ApiRequest): Prom
     if (request.method === "GET" && request.path === "/api/v1/home") return response(200, await services.home(actor.actorId));
     if (request.method === "GET" && request.path === "/api/v1/skills") return response(200, await services.skills(actor.actorId));
     if (request.method === "GET" && request.path === "/api/v1/progress") return response(200, await services.progress(actor.actorId));
-    if (request.method === "POST" && request.path === "/api/v1/practice/start" && typeof body?.microSkillRevisionId === "string" && services.startPublishedPractice) { const key=mutationKey(request); if(typeof key!=="string")return key; return response(201,await services.startPublishedPractice(actor.actorId,body.microSkillRevisionId)); }
+    if (request.method === "POST" && request.path === "/api/v1/practice/start" && typeof body?.microSkillRevisionId === "string" && services.startPublishedPractice) { const key=mutationKey(request); if(typeof key!=="string")return key; return response(201,await services.startPublishedPractice(actor.actorId,body.microSkillRevisionId,key)); }
     if (parts[2] === "ops") {
       if (actor.role !== "presenter" && actor.role !== "auditor") return failure("FORBIDDEN",403,"Content operations require staff authorization.");
       if (!services.ops) return failure("NOT_FOUND",404,"Content operations are unavailable.");
@@ -108,7 +112,8 @@ export async function dispatch(services: ApiServices, request: ApiRequest): Prom
       if (request.method !== "POST" || !body || !routeId(String(body.revisionId ?? ""))) return failure("INVALID_REQUEST",400,"A revision ID is required.");
       const id=String(body.revisionId); if(parts[3]==="review")return response(200,await services.ops.submitReview(id)); if(parts[3]==="approve")return response(200,await services.ops.approve(id));if(parts[3]==="publish")return response(200,await services.ops.publish(id));if(parts[3]==="deprecate")return response(200,await services.ops.deprecate(id));
     }
-    if (request.method === "GET" && parts[2] === "challenges" && routeId(parts[3])) return response(200, await services.practice.resume(parts[3], actor.actorId));
+    if (request.method === "GET" && parts[2] === "challenges" && routeId(parts[3]) && parts.length===4) return response(200, services.practiceLearnerView ? await services.practiceLearnerView(actor.actorId,parts[3]) : typeof services.practice.learnerView === "function" ? await services.practice.learnerView(parts[3], actor.actorId) : await services.practice.resume(parts[3], actor.actorId));
+    if (request.method === "GET" && parts[2] === "challenges" && routeId(parts[3]) && parts[4] === "process-feedback") return response(200, services.practiceProcessFeedback ? await services.practiceProcessFeedback(actor.actorId,parts[3]) : {});
     if (request.method === "GET" && parts[2] === "transfers" && routeId(parts[3])) return response(200, await services.transfer.resume(parts[3], actor.actorId));
     if (request.method === "GET" && parts[2] === "receipts" && routeId(parts[3])) return response(200, await services.receipts.get({ id: parts[3], actorId: actor.actorId }));
     if (request.method === "GET" && parts[2] === "audit" && parts[3] === "receipts" && routeId(parts[4])) {
@@ -131,7 +136,8 @@ export async function dispatch(services: ApiServices, request: ApiRequest): Prom
       return failure("INVALID_ATTEMPT", 400, "Attempt must be exactly kind: attempt or cannot_start.");
     }
     if (parts[2] === "challenges" && routeId(parts[3]) && parts[4] === "interventions" && routeId(parts[5])) return response(200, await services.practice.openReviewedHint({ sessionId: parts[3], actorId: actor.actorId, actorSessionId: actor.sessionId, interventionId: parts[5], idempotencyKey: key }));
-    if(parts[2]==="challenges"&&routeId(parts[3])&&parts[4]==="companion"){if(!services.companion||typeof body.message!=="string")return failure("AI_UNAVAILABLE",503,"Practice Companion is unavailable.");await services.practice.resume(parts[3],actor.actorId);return response(200,await services.companion.respond({learnerMessage:body.message,guidanceVersion:"runtime-v1",messageId:key}));}
+    if(parts[2]==="challenges"&&routeId(parts[3])&&parts[4]==="companion"){if(typeof body.message!=="string")return failure("AI_UNAVAILABLE",503,"Practice Companion is unavailable.");if(services.practiceCompanion)return response(200,await services.practiceCompanion(actor.actorId,parts[3],{message:body.message,idempotencyKey:key,actorSessionId:actor.sessionId}));if(!services.companion)return failure("AI_UNAVAILABLE",503,"Practice Companion is unavailable.");await services.practice.resume(parts[3],actor.actorId);return response(200,await services.companion.respond({learnerMessage:body.message,guidanceVersion:"runtime-v1",messageId:key}));}
+    if(parts[2]==="challenges"&&routeId(parts[3])&&parts[4]==="next"){if(!services.advancePractice)return failure("NOT_FOUND",404,"Practice continuation is unavailable.");return response(200,await services.advancePractice(actor.actorId,parts[3],key));}
     if (parts[2] === "challenges" && routeId(parts[3]) && parts[4] === "submissions") { const value = answer(body.answer); if (isApiResponse(value)) return value; if (body.reasoning !== undefined && !boundedString(body.reasoning, MAX_REASONING)) return failure("SUBMISSION_INVALID", 400, "Reasoning must be bounded text."); return response(200, await services.practice.submit({ sessionId: parts[3], actorId: actor.actorId, actorSessionId: actor.sessionId, answer: value, idempotencyKey: key })); }
     if (parts[2] === "challenges" && routeId(parts[3]) && parts[4] === "transfer" && parts[5] === "start" && routeId(String(body.sessionId ?? ""))) return response(201, await services.transfer.start({ sessionId: body.sessionId, practiceSessionId: parts[3], actorId: actor.actorId, actorSessionId: actor.sessionId, idempotencyKey: key }));
     if (parts[2] === "transfers" && routeId(parts[3]) && parts[4] === "submissions") { const value = answer(body.answer); if (isApiResponse(value)) return value; return response(200, await services.transfer.submit({ sessionId: parts[3], actorId: actor.actorId, actorSessionId: actor.sessionId, answer: value, idempotencyKey: key })); }

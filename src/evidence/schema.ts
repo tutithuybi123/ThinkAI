@@ -15,6 +15,7 @@ export const EVIDENCE_EVENT_TYPES = [
   "unable_to_start_declared",
   "intervention_opened",
   "practice_assistance_recorded",
+  "practice_process_feedback_recorded",
   "answer_submitted",
   "practice_scored",
   "transfer_started",
