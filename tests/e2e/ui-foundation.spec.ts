@@ -96,6 +96,15 @@ test("Practice renders authoritative result before secondary Process Feedback",a
   await expect(page.getByText("Bạn đã chọn một hướng giải rõ ràng.")).toBeVisible();
 });
 
+test("Transfer unwraps the authoritative Reveal envelope without a client exception",async({page})=>{
+  await page.route("**/api/v1/transfers/reveal-test",route=>route.fulfill({json:{sessionId:"reveal-test",task:{prompt:{body:"Tình huống mới."},input:"text"},state:{stage:"verified",outcome:"CORRECT"},canReveal:true}}));
+  await page.route("**/api/v1/transfers/reveal-test/connection/reveal",route=>route.fulfill({json:{replayed:false,reveal:{title:"Liên hệ đã duyệt",explanation:{body:"Nội dung Reveal chính xác."}}}}));
+  await page.goto("/transfer/reveal-test");
+  await page.getByRole("button",{name:"Xem mối liên hệ"}).click();
+  await expect(page.getByText("Nội dung Reveal chính xác.")).toBeVisible();
+  await expect(page.getByRole("heading",{name:/Application error/})).toHaveCount(0);
+});
+
 test("Practice preserves a draft and presents bounded Companion assistance separately",async({page})=>{
   await page.route("**/api/v1/challenges/draft",route=>route.fulfill({json:{sessionId:"draft",context:{label:"Bài luyện"},task:{prompt:{body:"Tìm nghiệm."},input:"text"},progress:{ordinal:1,label:"Bài luyện hiện tại"},state:{},nextAction:"submit"}}));
   await page.route("**/api/v1/challenges/draft/companion",route=>route.fulfill({json:{delivery:"Hãy thử xác định điều kiện trước."}}));
