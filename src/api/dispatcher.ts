@@ -21,7 +21,7 @@ export interface ApiServices {
   advancePractice?(actor:ActorId,sessionId:any,idempotencyKey:string):Promise<unknown>;
   practiceProcessFeedback?(actor:ActorId,sessionId:any):Promise<{message?:string}>;
   readonly practice: any; readonly transfer: any; readonly receipts: any;
-  readonly ops?: { createDraft(input:{id:any;body:any}):Promise<unknown>; get(id:string):Promise<unknown>; submitReview(id:string):Promise<unknown>; approve(id:string):Promise<unknown>; publish(id:string):Promise<unknown>; deprecate(id:string):Promise<unknown>; };
+  readonly ops?: { createDraft(input:{id:any;body:any}):Promise<unknown>; editDraft(id:string,body:any):Promise<unknown>; list():Promise<unknown>; get(id:string):Promise<unknown>; submitReview(id:string):Promise<unknown>; approve(id:string):Promise<unknown>; publish(id:string):Promise<unknown>; deprecate(id:string):Promise<unknown>; };
   readonly companion?: { respond(input:{learnerMessage:string;guidanceVersion:string;messageId:string}):Promise<unknown> };
   readonly demo?: { reset(input:{resetBy:ActorId;idempotencyKey:string}): unknown | Promise<unknown>; health(): unknown | Promise<unknown> };
   readonly sessionBootstrap?: {
@@ -110,7 +110,9 @@ export async function dispatch(services: ApiServices, request: ApiRequest): Prom
     if (parts[2] === "ops") {
       if (actor.role !== "presenter" && actor.role !== "auditor") return failure("FORBIDDEN",403,"Content operations require staff authorization.");
       if (!services.ops) return failure("NOT_FOUND",404,"Content operations are unavailable.");
+      if(request.method==="GET"&&parts[3]==="revisions")return response(200,await services.ops.list());
       if(request.method==="POST"&&parts[3]==="drafts"&&routeId(String(body?.revisionId??""))&&body?.contentAggregate)return response(201,await services.ops.createDraft({id:body.revisionId as any,body:body.contentAggregate as any}));
+      if(request.method==="PUT"&&parts[3]==="revisions"&&routeId(parts[4])&&body?.contentAggregate)return response(200,await services.ops.editDraft(parts[4]!,body.contentAggregate));
       if (request.method === "GET" && parts[3] === "revisions" && routeId(parts[4])) return response(200,await services.ops.get(parts[4]!));
       if (request.method !== "POST" || !body || !routeId(String(body.revisionId ?? ""))) return failure("INVALID_REQUEST",400,"A revision ID is required.");
       const id=String(body.revisionId); if(parts[3]==="review")return response(200,await services.ops.submitReview(id)); if(parts[3]==="approve")return response(200,await services.ops.approve(id));if(parts[3]==="publish")return response(200,await services.ops.publish(id));if(parts[3]==="deprecate")return response(200,await services.ops.deprecate(id));

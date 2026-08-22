@@ -1,7 +1,7 @@
 import { normalizeApiError, type FrontendError } from "../../src/frontend/foundation.js";
 
 export interface ApiRequestOptions {
-  readonly method?: "GET" | "POST";
+  readonly method?: "GET" | "POST" | "PUT";
   readonly body?: unknown;
   readonly idempotencyKey?: string;
   readonly signal?: AbortSignal;
