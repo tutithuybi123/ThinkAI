@@ -31,29 +31,31 @@ function stringState(state: Record<string, unknown> | undefined, field: string):
  * capability claim.
  */
 function matchesQualifyingChain(
-  snapshot: ReviewedPairSnapshot,
+  practiceSnapshot: ReviewedPairSnapshot,
+  transferSnapshot: ReviewedPairSnapshot,
   practiceState: Record<string, unknown>,
   transferState: Record<string, unknown>,
   practice: EvidenceEvent,
   transfer: EvidenceEvent,
 ): boolean {
-  return stringState(practiceState, "pairId") === snapshot.pair.id
-    && stringState(practiceState, "pairVersion") === snapshot.pair.version
-    && stringState(transferState, "pairId") === snapshot.pair.id
-    && stringState(transferState, "pairVersion") === snapshot.pair.version
-    && stringState(practiceState, "practiceTaskId") === snapshot.practiceTask.id
-    && stringState(practiceState, "practiceTaskVersion") === snapshot.practiceTask.version
-    && stringState(transferState, "taskId") === snapshot.transferTask.id
-    && stringState(transferState, "taskVersion") === snapshot.transferTask.version
+  return stringState(practiceState, "pairId") === practiceSnapshot.pair.id
+    && stringState(practiceState, "pairVersion") === practiceSnapshot.pair.version
+    && stringState(transferState, "pairId") === transferSnapshot.pair.id
+    && stringState(transferState, "pairVersion") === transferSnapshot.pair.version
+    && stringState(practiceState, "practiceTaskId") === practiceSnapshot.practiceTask.id
+    && stringState(practiceState, "practiceTaskVersion") === practiceSnapshot.practiceTask.version
+    && stringState(transferState, "taskId") === transferSnapshot.transferTask.id
+    && stringState(transferState, "taskVersion") === transferSnapshot.transferTask.version
     && stringState(practiceState, "skillId") === stringState(transferState, "skillId")
+    && (practiceSnapshot.microSkillRevisionId === undefined || transferSnapshot.microSkillRevisionId === undefined || practiceSnapshot.microSkillRevisionId === transferSnapshot.microSkillRevisionId)
     && stringState(practiceState, "taskFamilyId") === practice.taskFamilyId
     && stringState(transferState, "familyId") === transfer.taskFamilyId
     && practice.skillId === stringState(practiceState, "skillId")
-    && practice.taskId === snapshot.practiceTask.id
-    && practice.taskVersion === snapshot.practiceTask.version
+    && practice.taskId === practiceSnapshot.practiceTask.id
+    && practice.taskVersion === practiceSnapshot.practiceTask.version
     && transfer.skillId === stringState(transferState, "skillId")
-    && transfer.taskId === snapshot.transferTask.id
-    && transfer.taskVersion === snapshot.transferTask.version
+    && transfer.taskId === transferSnapshot.transferTask.id
+    && transfer.taskVersion === transferSnapshot.transferTask.version
     && transfer.taskFamilyId === stringState(transferState, "familyId");
 }
 export class CapabilityReceiptService {
@@ -73,8 +75,9 @@ export class CapabilityReceiptService {
     const practiceSession = await this.persistence.find(input.practiceSessionId);
     const transferSession = await this.persistence.find(input.transferSessionId);
     const ps = practiceSession?.state as Record<string,unknown> | undefined; const ts = transferSession?.state as Record<string,unknown> | undefined;
-    const snapshot = typeof ts?.snapshotKey === "string" ? await this.persistence.findContent(ts.snapshotKey) : undefined;
-    if (!practice || !transfer || practiceSession?.kind !== "challenge" || transferSession?.kind !== "transfer" || ps?.actorId !== input.actorId || ts?.actorId !== input.actorId || ts?.practiceSessionId !== input.practiceSessionId || !snapshot || !matchesQualifyingChain(snapshot, ps, ts, practice, transfer)) {
+    const practiceSnapshot = practiceSession?.contentIntegrityKey ? await this.persistence.findContent(practiceSession.contentIntegrityKey) : undefined;
+    const transferSnapshot = typeof ts?.snapshotKey === "string" ? await this.persistence.findContent(ts.snapshotKey) : undefined;
+    if (!practice || !transfer || practiceSession?.kind !== "challenge" || transferSession?.kind !== "transfer" || ps?.actorId !== input.actorId || ts?.actorId !== input.actorId || ts?.practiceSessionId !== input.practiceSessionId || !practiceSnapshot || !transferSnapshot || !matchesQualifyingChain(practiceSnapshot, transferSnapshot, ps, ts, practice, transfer)) {
       throw new ReceiptError("NOT_ELIGIBLE", "Authoritative evidence does not match one linked reviewed task pair.");
     }
     const prior = events.map((item) => receiptFromEvent(item.event)).find((receipt): receipt is CapabilityReceipt => !!receipt && receipt.sourceEventIds.includes(transfer.id));

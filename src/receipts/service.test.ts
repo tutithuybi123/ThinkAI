@@ -74,6 +74,18 @@ test("a transfer state pointing at a different reviewed pair cannot mix into the
   );
 });
 
+test("a fresh Transfer pair in the same authored micro-skill can issue a receipt", async () => {
+  const { actor, store, database, challenge, transferId } = await qualified();
+  const transfer = database.state.sessions.get(transferId); assert.ok(transfer);
+  const transferSnapshot = { ...(await store.findContent(transfer.contentIntegrityKey))!, pair: { id: taskPairId("pair_fresh_transfer"), version: "pair-v2" }, transferTask: { id: taskId("task_fresh_transfer"), version: "task-v2" }, integrityKey: "snapshot_fresh_transfer" };
+  const transferEvent = database.state.events.find((item) => item.event.type === "transfer_scored"); assert.ok(transferEvent);
+  database.state.events = database.state.events.map((item) => item === transferEvent ? { ...item, event: { ...item.event, taskId: transferSnapshot.transferTask.id, taskVersion: transferSnapshot.transferTask.version } } : item);
+  database.state.content.set(transferSnapshot.integrityKey, transferSnapshot);
+  database.state.sessions.set(transferId, { ...transfer, contentIntegrityKey: transferSnapshot.integrityKey, state: { ...transfer.state, pairId: transferSnapshot.pair.id, pairVersion: transferSnapshot.pair.version, taskId: transferSnapshot.transferTask.id, taskVersion: transferSnapshot.transferTask.version, snapshotKey: transferSnapshot.integrityKey } });
+  const issued = await new CapabilityReceiptService(store).issue({ actorId: actor, practiceSessionId: challenge, transferSessionId: transferId, idempotencyKey: "fresh-transfer" });
+  assert.equal(issued.receipt.sourceEventIds.length, 2);
+});
+
 test("cross-parent receipt evidence is rejected and later evidence remains append-only", async () => {
   const { actor, store, challenge, transferId } = await qualified();
   const service = new CapabilityReceiptService(store);
