@@ -18,7 +18,10 @@ import { EVIDENCE_EVENT_SCHEMA_VERSION } from "../domain/policies.js";
 import type { EvidenceEvent } from "../evidence/schema.js";
 import type { AppendEvidenceCommand, AppendEvidenceResult, SessionSnapshot } from "../persistence/index.js";
 import type { ScoreResult, ScoringService, SubmittedAnswer } from "../scoring/service.js";
-import { deterministicOutcome } from "../grading/aggregation.js";
+import { deterministicOutcome, deriveGradingOutcome } from "../grading/aggregation.js";
+import type { GradingOutcome } from "../grading/contracts.js";
+import { evaluateDeterministic } from "../scoring/service.js";
+import { evaluateReviewedRubric, type RubricEvaluatorAdapter } from "../ai/evaluator.js";
 import { satisfiesGradingGate } from "../grading/gate-policy.js";
 
 const PRACTICE_LIFECYCLE_POLICY_VERSION = "practice-lifecycle-v1";
@@ -36,6 +39,7 @@ export interface PracticeChallengeView {
   readonly sessionId: ChallengeSessionId;
   readonly skillId: SkillId;
   readonly pairId: TaskPairId;
+  readonly pairVersion: string;
   readonly taskId: TaskId;
   readonly taskVersion: string;
   readonly taskFamilyId: TaskFamilyId;
@@ -44,12 +48,24 @@ export interface PracticeChallengeView {
   readonly submissionCount: number;
   readonly openedInterventionIds: readonly InterventionId[];
   readonly lastScore?: ScoreResult;
+  readonly lastOutcome?: GradingOutcome;
 }
 
 export interface PracticeChallengeCommandResult {
   readonly replayed: boolean;
   readonly challenge: PracticeChallengeView;
   readonly score?: ScoreResult;
+}
+
+/** Learner-safe projection.  Pair, task-version, rubric and answer keys remain server-only. */
+export interface PracticeLearnerView {
+  readonly sessionId: ChallengeSessionId;
+  readonly context: { readonly label: string };
+  readonly task: { readonly prompt: { readonly format: "plain_text" | "markdown"; readonly body: string }; readonly assets: readonly string[]; readonly input: "text" | "written_solution" | "unavailable"; readonly requiresWrittenSolution: boolean };
+  readonly progress: { readonly ordinal: number; readonly label: string };
+  readonly state: { readonly stage: PracticeChallengeStage; readonly attemptCount: number; readonly submissionCount: number; readonly outcome?: "CORRECT" | "PARTIALLY_CORRECT" | "INCORRECT" | "UNCERTAIN" };
+  readonly assistance: { readonly available: boolean };
+  readonly nextAction: "submit" | "continue_practice" | "ready_for_transfer" | "recover";
 }
 
 export class PracticeChallengeError extends Error {
@@ -80,6 +96,7 @@ interface StoredOperationResult {
   readonly submissionCount: number;
   readonly openedInterventionIds: readonly InterventionId[];
   readonly lastScore?: ScoreResult;
+  readonly lastOutcome?: GradingOutcome;
 }
 
 interface StoredOperation {
@@ -102,6 +119,7 @@ interface ChallengeState {
   readonly submissionCount: number;
   readonly exposures: readonly InterventionExposure[];
   readonly lastScore?: ScoreResult;
+  readonly lastOutcome?: GradingOutcome;
   readonly operations: Readonly<Record<string, StoredOperation>>;
 }
 
@@ -146,6 +164,7 @@ export interface SubmitPracticeAnswerCommand {
 
 export interface PracticeChallengeServiceOptions {
   readonly now?: () => Date;
+  readonly rubricEvaluator?: RubricEvaluatorAdapter;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -238,13 +257,15 @@ function parseState(snapshot: SessionSnapshot): ChallengeState {
     attemptCount: state.attemptCount as number,
     submissionCount: state.submissionCount as number,
     exposures: Object.freeze(exposures),
-    ...(isScoreResult(state.lastScore) ? { lastScore: state.lastScore } : {}),
+      ...(isScoreResult(state.lastScore) ? { lastScore: state.lastScore } : {}),
+      ...(["CORRECT","PARTIALLY_CORRECT","INCORRECT","UNCERTAIN"].includes(String(state.lastOutcome)) ? { lastOutcome: state.lastOutcome as GradingOutcome } : {}),
     operations: Object.freeze(operations),
   });
 }
 
 export class PracticeChallengeService {
   private readonly now: () => Date;
+  private readonly rubricEvaluator: RubricEvaluatorAdapter | undefined;
 
   public constructor(
     private readonly content: ReviewedContentRepository,
@@ -253,6 +274,7 @@ export class PracticeChallengeService {
     options: PracticeChallengeServiceOptions = {},
   ) {
     this.now = options.now ?? (() => new Date());
+    this.rubricEvaluator = options.rubricEvaluator;
   }
 
   public async start(command: StartPracticeChallengeCommand): Promise<PracticeChallengeCommandResult> {
@@ -346,13 +368,14 @@ export class PracticeChallengeService {
       throw new PracticeChallengeError("INVALID_TRANSITION", "A practice answer can be submitted only after an attempt or reviewed hint.");
     }
     const score = this.scoring.score(loaded.task, command.answer);
-    const gradingOutcome = deterministicOutcome(score);
+    const gradingOutcome = await this.grade(loaded.task, command.answer, score);
     const stage: PracticeChallengeStage = satisfiesGradingGate(gradingOutcome) ? "solved" : loaded.state.exposures.length > 0 ? "assisted" : "attempting";
     const base: ChallengeState = Object.freeze({
       ...loaded.state,
       stage,
       submissionCount: loaded.state.submissionCount + 1,
       lastScore: score,
+      lastOutcome: gradingOutcome,
     });
     const next = this.withOperation(base, command.idempotencyKey, fingerprint, this.resultFor(base));
     const submitted = this.event(command.sessionId, command.idempotencyKey, 0, next, loaded.task, "answer_submitted", {
@@ -361,6 +384,9 @@ export class PracticeChallengeService {
     });
     const scored = this.event(command.sessionId, command.idempotencyKey, 1, next, loaded.task, "practice_scored", {
       outcome: score.outcome,
+      gradingOutcome,
+      pairId: loaded.state.pairId,
+      pairVersion: loaded.state.pairVersion,
       answerSpecVersion: score.answerSpecVersion,
       ...(score.normalizedAnswer === undefined ? {} : { normalizedAnswer: score.normalizedAnswer }),
       ...(score.reasonCode === undefined ? {} : { reasonCode: score.reasonCode }),
@@ -372,6 +398,33 @@ export class PracticeChallengeService {
   public async resume(sessionId: ChallengeSessionId, actorId: ActorId): Promise<PracticeChallengeView> {
     const loaded = await this.load(sessionId, actorId);
     return this.view(sessionId, loaded.state);
+  }
+
+  public async learnerView(sessionId: ChallengeSessionId, actorId: ActorId): Promise<PracticeLearnerView> {
+    const loaded = await this.load(sessionId, actorId);
+    const score = loaded.state.lastScore;
+    const outcome = loaded.state.lastOutcome ?? (score === undefined ? undefined : deterministicOutcome(score));
+    const input = loaded.task.answerSpec.kind === "written_solution" ? "written_solution"
+      : loaded.task.answerSpec.kind === "choice" ? "unavailable" : "text";
+    const nextAction = outcome === "CORRECT" ? "ready_for_transfer" : loaded.state.stage === "solved" ? "recover" : "submit";
+    return Object.freeze({
+      sessionId,
+      context: { label: "Bài luyện" },
+      task: Object.freeze({ prompt: loaded.task.prompt, assets: Object.freeze([...loaded.task.assetRefs]), input, requiresWrittenSolution: loaded.task.answerSpec.kind === "written_solution" }),
+      progress: { ordinal: Math.max(1, loaded.state.submissionCount + 1), label: "Bài luyện hiện tại" },
+      state: Object.freeze({ stage: loaded.state.stage, attemptCount: loaded.state.attemptCount, submissionCount: loaded.state.submissionCount, ...(outcome === undefined ? {} : { outcome }) }),
+      assistance: { available: true },
+      nextAction,
+    });
+  }
+
+  private async grade(task:TaskContent, answer:SubmittedAnswer, score:ScoreResult):Promise<GradingOutcome>{
+    if(task.answerSpec.kind!=="written_solution")return deterministicOutcome(score);
+    const assessment=task.answerSpec.assessment;
+    if(!this.rubricEvaluator)return "UNCERTAIN";
+    const rawText=typeof answer==="string"?answer:answer.kind==="text"?answer.value:"";
+    const evidence=await evaluateReviewedRubric(this.rubricEvaluator,{taskVersion:task.version,rubricVersion:assessment.aiGuidance.version,rawText,shape:assessment.gradingShape,criterionIds:assessment.criteria.map(x=>x.id),provenance:{adapterId:"runtime",modelVersion:"configured",schemaVersion:"rubric-facets/v1"}});
+    return deriveGradingOutcome({deterministic:evaluateDeterministic(task,answer,this.scoring),rubric:evidence.status==="valid"?evidence.facets:undefined,shape:assessment.gradingShape,criterionIds:assessment.criteria.map(x=>x.id),contentVersion:task.version,taskVersion:task.version,rubricVersion:assessment.aiGuidance.version}).outcome;
   }
 
   private async recordAttemptKind(command: RecordAttemptCommand | DeclareCannotStartCommand, kind: "attempt" | "cannot_start"): Promise<PracticeChallengeCommandResult> {
@@ -442,6 +495,7 @@ export class PracticeChallengeService {
       submissionCount: existing.result.submissionCount,
       exposures: Object.freeze(existing.result.openedInterventionIds.map((id) => ({ id, version: "replayed", openedAt: "replayed" }))),
       ...(existing.result.lastScore === undefined ? {} : { lastScore: existing.result.lastScore }),
+      ...(existing.result.lastOutcome === undefined ? {} : { lastOutcome: existing.result.lastOutcome }),
     });
     return {
       replayed: true,
@@ -461,6 +515,7 @@ export class PracticeChallengeService {
       submissionCount: state.submissionCount,
       openedInterventionIds: Object.freeze(state.exposures.map((exposure) => exposure.id)),
       ...(state.lastScore === undefined ? {} : { lastScore: state.lastScore }),
+      ...(state.lastOutcome === undefined ? {} : { lastOutcome: state.lastOutcome }),
     });
   }
 
@@ -469,6 +524,7 @@ export class PracticeChallengeService {
       sessionId,
       skillId: state.skillId,
       pairId: state.pairId,
+      pairVersion: state.pairVersion,
       taskId: state.practiceTaskId,
       taskVersion: state.practiceTaskVersion,
       taskFamilyId: state.taskFamilyId,
@@ -477,6 +533,7 @@ export class PracticeChallengeService {
       submissionCount: state.submissionCount,
       openedInterventionIds: Object.freeze(state.exposures.map((exposure) => exposure.id)),
       ...(state.lastScore === undefined ? {} : { lastScore: state.lastScore }),
+      ...(state.lastOutcome === undefined ? {} : { lastOutcome: state.lastOutcome }),
     });
   }
 
