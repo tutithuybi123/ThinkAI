@@ -35,6 +35,20 @@ test("migration runner refuses an edited migration that was already applied", as
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
+test("migration runner accepts a legacy CRLF checksum without accepting a content edit", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "thinkai-migrations-crlf-"));
+  try {
+    const file = join(directory, "0001_example.sql");
+    const client = new MigrationTestClient();
+    await writeFile(file, "CREATE TABLE example (id TEXT);\r\n", "utf8");
+    assert.deepEqual(await runMigrations(client, directory), ["0001_example.sql"]);
+    await writeFile(file, "CREATE TABLE example (id TEXT);\n", "utf8");
+    assert.deepEqual(await runMigrations(client, directory), []);
+    await writeFile(file, "CREATE TABLE example (id TEXT, changed BOOLEAN);\n", "utf8");
+    await assert.rejects(() => runMigrations(client, directory), /checksum mismatch/i);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
 const databaseUrl = process.env.THINKAI_TEST_DATABASE_URL;
 const integration = databaseUrl ? test : test.skip;
 integration("PostgreSQL migration metadata rejects a modified applied SQL file", async () => {
