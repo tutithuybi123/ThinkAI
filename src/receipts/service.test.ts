@@ -40,6 +40,8 @@ test("qualifying receipt is bound to the exact practice/transfer parent chain an
 });
 test("learner receipt DTO excludes provenance, source events and internal policy",async()=>{const {actor,store,challenge,transferId}=await qualified();const service=new CapabilityReceiptService(store);const issued=await service.issue({actorId:actor,practiceSessionId:challenge,transferSessionId:transferId,idempotencyKey:"learner-view"});const view=await service.learnerView({id:issued.receipt.id,actorId:actor});const serialized=JSON.stringify(view);for(const hidden of ["sourceEventIds","policyVersion","provenance","actorId","skillId"])assert.equal(serialized.includes(hidden),false);assert.equal(view.claim.length>0,true);});
 
+test("learner receipt copy stays concrete and Vietnamese",async()=>{const {actor,store,challenge,transferId}=await qualified();const receipt=await new CapabilityReceiptService(store).issue({actorId:actor,practiceSessionId:challenge,transferSessionId:transferId,idempotencyKey:"vi-copy"});assert.match(receipt.receipt.claim,/độc lập/i);assert.match(receipt.receipt.observedConditions[0]!,/bài luyện/i);});
+
 test("same-skill forged score facts with a wrong task, version, or family cannot issue a receipt", async () => {
   const { actor, store, database, challenge, transferId } = await qualified();
   const tampered = structuredClone(database.state.events);
