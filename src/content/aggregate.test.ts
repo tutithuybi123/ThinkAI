@@ -3,7 +3,7 @@ import test from "node:test";
 import { actorId, contentRevisionId, microSkillId, skillId, subjectId, taskId, taskPairId, topicId } from "../domain/ids.js";
 import { selectFreshTransferPair, selectInitialPair } from "./selection.js";
 import { validateContentAggregate } from "./v11-validator.js";
-import { createAggregatePairSnapshot } from "./snapshot.js";
+import { createAggregatePairSnapshot, createPublishedPairSnapshot, runtimeContentFromSnapshot } from "./snapshot.js";
 import { validateContentBundle } from "./validator.js";
 import { packageAStructuralFixture } from "../fixtures/package-a-structural.js";
 import { assertPublishableContent, publishReviewedAggregate, validatePublishableContent } from "./publication.js";
@@ -65,6 +65,17 @@ test("draft aggregates may be incomplete but publication requires a complete pai
 
 test("malformed aggregate data fails closed instead of throwing", () => {
   assert.doesNotThrow(() => assert.notEqual(validateContentAggregate({ microSkills: [{ microSkill: { prerequisiteMicroSkillIds: "bad" }, pairs: [] }] } as unknown).length, 0));
+});
+
+test("a published aggregate pair carries its exact executable content without a bootstrap repository", () => {
+  const aggregate = base();
+  const selected = aggregate.pairs[0]!;
+  const snapshot = createPublishedPairSnapshot(aggregate, selected);
+  const runtime = runtimeContentFromSnapshot(snapshot);
+  assert.equal(runtime.pair.id, selected.id);
+  assert.equal(runtime.practiceTask.id, selected.practiceContent.id);
+  assert.equal(runtime.transferTask.id, selected.transferContent.id);
+  assert.equal(runtime.practiceTask.skillId, aggregate.microSkill.evidenceSkillId);
 });
 
 test("requires reviewed learner-facing labels for the published hierarchy", () => {

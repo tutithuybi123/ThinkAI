@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import type { InterventionContent, ReviewedTaskPair, TaskContent } from "../content/schema.js";
 import type { ReviewedContentRepository } from "../content/repository.js";
-import type { ReviewedPairSnapshot } from "../content/snapshot.js";
+import { runtimeContentFromSnapshot, type ReviewedPairSnapshot } from "../content/snapshot.js";
 import {
   type ActorId,
   type ChallengeSessionId,
@@ -128,6 +128,8 @@ export interface StartPracticeChallengeCommand {
   readonly actorId: ActorId;
   /** A server-selected reviewed pair. Browser routes never supply this field. */
   readonly pairId?: TaskPairId;
+  /** Exact server-resolved published material. Never accepted from browser/API input. */
+  readonly publishedSnapshot?: ReviewedPairSnapshot;
   readonly idempotencyKey: string;
   readonly actorSessionId?: string;
 }
@@ -280,13 +282,14 @@ export class PracticeChallengeService {
   public async start(command: StartPracticeChallengeCommand): Promise<PracticeChallengeCommandResult> {
     requireNonEmpty(command.idempotencyKey, "idempotencyKey");
     const existing = await this.persistence.find(command.sessionId);
-    const pair = command.pairId === undefined ? this.content.selectApprovedPair() : this.content.getReviewedPair(command.pairId);
+    const published = command.publishedSnapshot ? runtimeContentFromSnapshot(command.publishedSnapshot) : undefined;
+    const pair = published?.pair ?? (command.pairId === undefined ? this.content.selectApprovedPair() : this.content.getReviewedPair(command.pairId));
     const fingerprint = JSON.stringify({ action: "start", actorId: command.actorId, pairId: pair.id, pairVersion: pair.version });
     if (existing) return this.replayExisting(command.sessionId, command.actorId, existing, command.idempotencyKey, fingerprint);
 
-    const task = this.content.getTask(pair.practiceTaskId);
+    const task = published?.practiceTask ?? this.content.getTask(pair.practiceTaskId);
     this.assertApprovedPractice(pair, task);
-    const snapshot = this.content.createPairSnapshot(pair.id);
+    const snapshot = command.publishedSnapshot ?? this.content.createPairSnapshot(pair.id);
     const state: ChallengeState = Object.freeze({
       stateVersion: SESSION_STATE_VERSION,
       actorId: command.actorId,
@@ -454,13 +457,13 @@ export class PracticeChallengeService {
     if (state.actorId !== actorId) throw new PracticeChallengeError("ACTOR_MISMATCH", "This practice challenge belongs to another learner.");
     const snapshot = await this.persistence.findContent(state.contentIntegrityKey);
     if (!snapshot) throw new PracticeChallengeError("CONTENT_VERSION_DRIFT", `Practice challenge ${sessionId} has no persisted content snapshot.`);
-    try {
-      this.content.assertSnapshotIntegrity(snapshot);
-    } catch (error) {
-      throw new PracticeChallengeError("CONTENT_VERSION_DRIFT", error instanceof Error ? error.message : "Current content no longer matches this challenge.");
+    let published: ReturnType<typeof runtimeContentFromSnapshot> | undefined;
+    try { published = runtimeContentFromSnapshot(snapshot); } catch (error) {
+      if (snapshot.runtimeContent) throw new PracticeChallengeError("CONTENT_VERSION_DRIFT", error instanceof Error ? error.message : "Persisted content snapshot is invalid.");
+      try { this.content.assertSnapshotIntegrity(snapshot); } catch (legacyError) { throw new PracticeChallengeError("CONTENT_VERSION_DRIFT", legacyError instanceof Error ? legacyError.message : "Current content no longer matches this challenge."); }
     }
-    const pair = this.content.getReviewedPair(state.pairId);
-    const task = this.content.getTask(state.practiceTaskId);
+    const pair = published?.pair ?? this.content.getReviewedPair(state.pairId);
+    const task = published?.practiceTask ?? this.content.getTask(state.practiceTaskId);
     this.assertApprovedPractice(pair, task);
     if (!sameVersion(snapshot.pair, pair.id, pair.version)
       || !sameVersion(snapshot.practiceTask, task.id, task.version)
@@ -470,7 +473,7 @@ export class PracticeChallengeService {
       || state.taskFamilyId !== task.familyId) {
       throw new PracticeChallengeError("CONTENT_VERSION_DRIFT", "Current reviewed content differs from the challenge content snapshot.");
     }
-    const interventions = this.content.getInterventionsForPracticeTask(task.id);
+    const interventions = published?.interventions ?? this.content.getInterventionsForPracticeTask(task.id);
     return { state, snapshot, task, interventions };
   }
 

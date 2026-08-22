@@ -76,7 +76,7 @@ test("idempotency and persisted session state survive a service reload", async (
   await assert.rejects(() => reloaded.service.declareCannotStart({ sessionId: session, actorId: learner, idempotencyKey: "attempt" }), (error: unknown) => error instanceof PracticeChallengeError && error.code === "IDEMPOTENCY_CONFLICT");
 });
 
-test("current content that differs from the persisted snapshot cannot resume", async () => {
+test("an exact persisted runtime snapshot survives later bootstrap content changes", async () => {
   const database = new MemoryPersistenceDatabase();
   const initial = createService(database);
   await initial.service.start({ sessionId: session, actorId: learner, pairId: pair, idempotencyKey: "start" });
@@ -86,5 +86,5 @@ test("current content that differs from the persisted snapshot cannot resume", a
   };
   const changedRepository = ReviewedContentRepository.fromRaw(drifted, { allowStructuralTestFixture: true });
   const reloaded = createService(database, changedRepository);
-  await assert.rejects(() => reloaded.service.resume(session, learner), (error: unknown) => error instanceof PracticeChallengeError && error.code === "CONTENT_VERSION_DRIFT");
+  assert.equal((await reloaded.service.resume(session, learner)).pairVersion, "1");
 });

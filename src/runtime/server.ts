@@ -27,6 +27,7 @@ import { assertPublishedEvidenceIdentity, deriveLearnerDiscovery } from "./learn
 import { derivePracticeNextAction } from "../challenge/practice-gate.js";
 import { selectFreshPracticePair } from "../content/selection.js";
 import { startFreshIndependentAttempt } from "../transfer/fresh-attempt.js";
+import { createPublishedPairSnapshot } from "../content/snapshot.js";
 
 export interface RuntimeConfiguration {
   readonly databaseUrl: string;
@@ -107,7 +108,19 @@ export async function createProductionRuntime(config: RuntimeConfiguration): Pro
   await auth.initialize();
   const receipts = new CapabilityReceiptService(persistence);
   const demo = new PostgresDemoService(client, config.cleanDemoActorId);
-  const practice = new PracticeChallengeService(content, persistence, scoring);
+  const practice = new PracticeChallengeService(content, persistence, scoring, { ...(rubricEvaluator ? { rubricEvaluator } : {}) });
+  const nodeForPractice = async (sessionId: ChallengeSessionId, pairId: string, pairVersion: string) => {
+    const stored = await persistence.find(sessionId);
+    const key = stored?.contentIntegrityKey;
+    const snapshot = key ? await persistence.findContent(key) : undefined;
+    const revisionId = snapshot?.microSkillRevisionId;
+    if (revisionId) {
+      const revision = await contentRevisions.getRevision<any>(revisionId as never);
+      const node = revision?.body?.microSkills?.find((item: any) => item.microSkill?.revisionId === revisionId && item.pairs?.some((pair: any) => pair.id === pairId && pair.version === pairVersion));
+      if (node) return node;
+    }
+    return (await contentRevisions.listActivePublishedMicroSkills()).find(item=>item.pairs.some(pair=>pair.id===pairId&&pair.version===pairVersion));
+  };
   if(rawSeed) await demo.initialize(rawSeed);
   return Object.freeze({
     auth,
@@ -127,11 +140,11 @@ export async function createProductionRuntime(config: RuntimeConfiguration): Pro
       return delivered.delivery?{delivery:delivered.delivery}:{};
     },
     async practiceLearnerView(actor:ActorId,sessionId:ChallengeSessionId){
-      const raw=await practice.learnerView(sessionId,actor); const challenge=await practice.resume(sessionId,actor); const nodes=await contentRevisions.listActivePublishedMicroSkills(); const node=nodes.find(item=>item.pairs.some(pair=>pair.id===challenge.pairId&&pair.version===challenge.pairVersion)); if(!node||!node.practiceGate){if(config.allowStructuralTestContent)return {...raw,progress:{ordinal:1,label:"Bài luyện hiện tại"},nextAction:"submit"};throw Object.assign(new Error("Practice gate is unavailable."),{code:"CONTENT_INTEGRITY_FAILED"});}
+      const raw=await practice.learnerView(sessionId,actor); const challenge=await practice.resume(sessionId,actor); const node=await nodeForPractice(sessionId,challenge.pairId,challenge.pairVersion); if(!node||!node.practiceGate){if(config.allowStructuralTestContent)return {...raw,progress:{ordinal:1,label:"Bài luyện hiện tại"},nextAction:"submit"};throw Object.assign(new Error("Practice gate is unavailable."),{code:"CONTENT_INTEGRITY_FAILED"});}
       const events=await persistence.list(actor); const scored=events.filter(item=>item.event.type==="practice_scored"&&item.event.skillId===challenge.skillId).map(item=>({pairId:String(item.event.payload.pairId??""),pairVersion:String(item.event.payload.pairVersion??""),taskId:String(item.event.taskId??""),taskVersion:String(item.event.taskVersion??""),outcome:String(item.event.payload.gradingOutcome??"UNCERTAIN") as "CORRECT"|"PARTIALLY_CORRECT"|"INCORRECT"|"UNCERTAIN"})).filter(item=>item.pairId); const nextAction=derivePracticeNextAction(node.practiceGate,scored); return {...raw,progress:{ordinal:Math.min(scored.length+1,node.practiceGate.maxPracticeItems),label:"Bài luyện hiện tại"},nextAction};
     },
     async advancePractice(actor:ActorId,sessionId:ChallengeSessionId,idempotencyKey:string){
-      const challenge=await practice.resume(sessionId,actor); const view=await this.practiceLearnerView(actor,sessionId) as {nextAction:string}; if(view.nextAction!=="CONTINUE_PRACTICE")return {nextAction:view.nextAction}; const node=(await contentRevisions.listActivePublishedMicroSkills()).find(item=>item.pairs.some(pair=>pair.id===challenge.pairId&&pair.version===challenge.pairVersion)); if(!node||!node.practiceGate)throw Object.assign(new Error("Practice gate is unavailable."),{code:"CONTENT_INTEGRITY_FAILED"}); const events=await persistence.list(actor); const exposed=events.filter(item=>item.event.type==="challenge_started"&&item.event.skillId===challenge.skillId).map(item=>({pairId:String(item.event.payload.pairId),pairVersion:String(item.event.payload.pairVersion)})); const selected=selectFreshPracticePair({actorId:actor,microSkillRevisionId:node.microSkill.revisionId,ordinal:exposed.length+1,eligiblePairs:node.pairs,exposedPairs:exposed as any}); if(selected.kind!=="PAIR_SELECTED")return {nextAction:"PRACTICE_RECOVERY"}; const nextSession=challengeSessionId(`challenge_${createHash("sha256").update(`${sessionId}|${idempotencyKey}|next`).digest("hex").slice(0,32)}`); const started=await practice.start({sessionId:nextSession,actorId:actor,pairId:selected.pair.id,idempotencyKey:`next:${idempotencyKey}`}); return {nextAction:"CONTINUE_PRACTICE",sessionId:started.challenge.sessionId};
+      const challenge=await practice.resume(sessionId,actor); const view=await this.practiceLearnerView(actor,sessionId) as {nextAction:string}; if(view.nextAction!=="CONTINUE_PRACTICE")return {nextAction:view.nextAction}; const node=await nodeForPractice(sessionId,challenge.pairId,challenge.pairVersion); if(!node||!node.practiceGate)throw Object.assign(new Error("Practice gate is unavailable."),{code:"CONTENT_INTEGRITY_FAILED"}); const events=await persistence.list(actor); const exposed=events.filter(item=>item.event.type==="challenge_started"&&item.event.skillId===challenge.skillId).map(item=>({pairId:String(item.event.payload.pairId),pairVersion:String(item.event.payload.pairVersion)})); const selected=selectFreshPracticePair({actorId:actor,microSkillRevisionId:node.microSkill.revisionId,ordinal:exposed.length+1,eligiblePairs:node.pairs,exposedPairs:exposed as any}); if(selected.kind!=="PAIR_SELECTED")return {nextAction:"PRACTICE_RECOVERY"}; const nextSession=challengeSessionId(`challenge_${createHash("sha256").update(`${sessionId}|${idempotencyKey}|next`).digest("hex").slice(0,32)}`); const started=await practice.start({sessionId:nextSession,actorId:actor,publishedSnapshot:createPublishedPairSnapshot(node,selected.pair),idempotencyKey:`next:${idempotencyKey}`}); return {nextAction:"CONTINUE_PRACTICE",sessionId:started.challenge.sessionId};
     },
     async practiceProcessFeedback(actor:ActorId,sessionId:ChallengeSessionId){
       const challenge=await practice.resume(sessionId,actor);
@@ -139,7 +152,7 @@ export async function createProductionRuntime(config: RuntimeConfiguration): Pro
       if(!processFeedback)return {};
       try{const delivered=await processFeedback.deliver({practiceAnswer:"Learner submitted a Practice response.",assistanceCount:challenge.openedInterventionIds.length,taskVersion:challenge.taskVersion,rubricVersion:"runtime-v1",evaluatorVersion:"runtime-v1"});if(delivered.message){const id=evidenceEventId(`event_${createHash("sha256").update(`${sessionId}|process-feedback`).digest("hex").slice(0,32)}`);await persistence.appendCommand({idempotencyKey:`process-feedback:${sessionId}`,events:[{id,type:"practice_process_feedback_recorded",actorId:actor,correlationId:sessionId,challengeSessionId:sessionId,skillId:challenge.skillId,taskId:challenge.taskId,taskVersion:challenge.taskVersion,taskFamilyId:challenge.taskFamilyId,occurredAt:new Date().toISOString(),schemaVersion:1,policyVersion:"process-feedback/v1",provenance:"live",payload:{provider:delivered.provider,model:delivered.model,contentVersion:challenge.taskVersion}}]});}return delivered;}catch{return {};}
     },
-    async startPublishedPractice(actor:ActorId,revisionId:string,idempotencyKey:string){const sessionId=challengeSessionId(`challenge_${createHash("sha256").update(`${actor}|${revisionId}|${idempotencyKey}`).digest("hex").slice(0,32)}`);if(config.allowStructuralTestContent&&revisionId==="legacy_fixture"){const pair=content.selectApprovedPair();const started=await practice.start({sessionId,actorId:actor,pairId:pair.id,idempotencyKey:`start:${idempotencyKey}`});return Object.freeze({sessionId:started.challenge.sessionId,microSkillRevisionId:revisionId});}const node=await contentRevisions.activeMicroSkill(revisionId as never);const pair=await contentRevisions.selectInitialPublishedPair(actor,revisionId as never);const legacyPair=content.getReviewedPair(pair.id as never);const practiceTask=content.getTask(legacyPair.practiceTaskId);const transferTask=content.getTask(legacyPair.transferTaskId);assertPublishedEvidenceIdentity(node,legacyPair.skillId);if(legacyPair.version!==pair.version||legacyPair.practiceTaskId!==pair.practiceTask.id||legacyPair.transferTaskId!==pair.transferTask.id||practiceTask.version!==pair.practiceTask.version||transferTask.version!==pair.transferTask.version)throw Object.assign(new Error("Published content cannot be resolved by the Practice runtime."),{code:"CONTENT_INTEGRITY_FAILED"});const started=await practice.start({sessionId,actorId:actor,pairId:pair.id,idempotencyKey:`start:${idempotencyKey}`});return Object.freeze({sessionId:started.challenge.sessionId,microSkillRevisionId:revisionId});},
+    async startPublishedPractice(actor:ActorId,revisionId:string,idempotencyKey:string){const sessionId=challengeSessionId(`challenge_${createHash("sha256").update(`${actor}|${revisionId}|${idempotencyKey}`).digest("hex").slice(0,32)}`);if(config.allowStructuralTestContent&&revisionId==="legacy_fixture"){const pair=content.selectApprovedPair();const started=await practice.start({sessionId,actorId:actor,pairId:pair.id,idempotencyKey:`start:${idempotencyKey}`});return Object.freeze({sessionId:started.challenge.sessionId,microSkillRevisionId:revisionId});}const node=await contentRevisions.activeMicroSkill(revisionId as never);const pair=await contentRevisions.selectInitialPublishedPair(actor,revisionId as never);const snapshot=createPublishedPairSnapshot(node,pair);assertPublishedEvidenceIdentity(node,snapshot.runtimeContent!.pair.skillId);const started=await practice.start({sessionId,actorId:actor,publishedSnapshot:snapshot,idempotencyKey:`start:${idempotencyKey}`});return Object.freeze({sessionId:started.challenge.sessionId,microSkillRevisionId:revisionId});},
     async startPublishedTransfer(actor:ActorId,practiceSessionId:ChallengeSessionId,idempotencyKey:string,actorSessionId:string){
       const sessionId=transferSessionId(`transfer_${createHash("sha256").update(`${actor}|${practiceSessionId}|${idempotencyKey}`).digest("hex").slice(0,32)}`);
       try { await this.transfer.resume(sessionId,actor); return Object.freeze({nextAction:"TRANSFER_STARTED",sessionId}); } catch (error) { if((error as {code?:string}).code!=="SESSION_NOT_FOUND") throw error; }
@@ -147,12 +160,12 @@ export async function createProductionRuntime(config: RuntimeConfiguration): Pro
       const practiceView=await this.practiceLearnerView(actor,practiceSessionId) as {nextAction:string};
       if(practiceView.nextAction!=="READY_FOR_TRANSFER")throw Object.assign(new Error("Independent verification is not ready."),{code:"PRACTICE_NOT_ELIGIBLE"});
       const challenge=await practice.resume(practiceSessionId,actor);
-      const node=(await contentRevisions.listActivePublishedMicroSkills()).find(item=>item.pairs.some(pair=>pair.id===challenge.pairId&&pair.version===challenge.pairVersion));
+      const node=await nodeForPractice(practiceSessionId,challenge.pairId,challenge.pairVersion);
       if(!node)throw Object.assign(new Error("Published MicroSkill is unavailable."),{code:"CONTENT_INTEGRITY_FAILED"});
       const exposure=await contentRevisions.exposures(actor,node.microSkill.revisionId);
       const selected=await startFreshIndependentAttempt(contentRevisions,{actorId:actor,microSkillRevisionId:node.microSkill.revisionId,ordinal:exposure.pairs.length+1,eligiblePairs:node.pairs});
       if(selected.kind!=="PAIR_SELECTED")return Object.freeze({nextAction:"NO_FRESH_TRANSFER_AVAILABLE"});
-      const started=await this.transfer.startForPair({sessionId,practiceSessionId,actorId:actor,actorSessionId,idempotencyKey:`start:${idempotencyKey}`,pairId:selected.pair.id});
+      const started=await this.transfer.startForPair({sessionId,practiceSessionId,actorId:actor,actorSessionId,idempotencyKey:`start:${idempotencyKey}`,publishedSnapshot:createPublishedPairSnapshot(node,selected.pair)});
       return Object.freeze({nextAction:"TRANSFER_STARTED",sessionId:started.transfer.sessionId});
     },
     async retryPublishedTransfer(actor:ActorId,id:string,idempotencyKey:string,actorSessionId:string){
