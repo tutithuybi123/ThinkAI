@@ -15,6 +15,7 @@ export interface ApiServices {
   startPublishedPractice?(actor:ActorId,revisionId:string,idempotencyKey:string):Promise<unknown>;
   startPublishedTransfer?(actor:ActorId,practiceSessionId:any,idempotencyKey:string,actorSessionId:string):Promise<unknown>;
   retryPublishedTransfer?(actor:ActorId,transferSessionId:string,idempotencyKey:string,actorSessionId:string):Promise<unknown>;
+  issueReceiptForTransfer?(actor:ActorId,transferSessionId:string,idempotencyKey:string,actorSessionId:string):Promise<unknown>;
   practiceCompanion?(actor:ActorId,sessionId:any,input:{message:string;idempotencyKey:string;actorSessionId:string}):Promise<{delivery?:string}>;
   practiceLearnerView?(actor:ActorId,sessionId:any):Promise<unknown>;
   advancePractice?(actor:ActorId,sessionId:any,idempotencyKey:string):Promise<unknown>;
@@ -148,6 +149,7 @@ export async function dispatch(services: ApiServices, request: ApiRequest): Prom
     }
     if (parts[2] === "transfers" && routeId(parts[3]) && parts[4] === "submissions") { const value = answer(body.answer); if (isApiResponse(value)) return value; return response(200, await services.transfer.submit({ sessionId: parts[3], actorId: actor.actorId, actorSessionId: actor.sessionId, answer: value, idempotencyKey: key })); }
     if (parts[2] === "transfers" && routeId(parts[3]) && parts[4] === "retry") { if(!services.retryPublishedTransfer)return failure("NOT_FOUND",404,"Transfer retry is unavailable."); return response(201,await services.retryPublishedTransfer(actor.actorId,parts[3]!,key,actor.sessionId)); }
+    if (parts[2] === "transfers" && routeId(parts[3]) && parts[4] === "receipt") {if(!services.issueReceiptForTransfer)return failure("NOT_FOUND",404,"Receipt issuance is unavailable.");return response(201,await services.issueReceiptForTransfer(actor.actorId,parts[3]!,key,actor.sessionId));}
     if (parts[2] === "transfers" && routeId(parts[3]) && parts[4] === "connection" && parts[5] === "reveal") return response(200, await services.transfer.revealConnection({ sessionId: parts[3], actorId: actor.actorId, actorSessionId: actor.sessionId, idempotencyKey: key }));
     if (request.path === "/api/v1/receipts/issue" && routeId(String(body.practiceSessionId ?? "")) && routeId(String(body.transferSessionId ?? ""))) return response(201, await services.receipts.issue({ actorId: actor.actorId, actorSessionId: actor.sessionId, practiceSessionId: body.practiceSessionId, transferSessionId: body.transferSessionId, idempotencyKey: key }));
     return failure("INVALID_REQUEST", 400, "Request does not match a supported action.");

@@ -38,6 +38,7 @@ test("qualifying receipt is bound to the exact practice/transfer parent chain an
   assert.equal(again.replayed, true);
   assert.equal((await store.list()).filter((item) => item.event.type === "capability_receipt_issued").length, 1);
 });
+test("learner receipt DTO excludes provenance, source events and internal policy",async()=>{const {actor,store,challenge,transferId}=await qualified();const service=new CapabilityReceiptService(store);const issued=await service.issue({actorId:actor,practiceSessionId:challenge,transferSessionId:transferId,idempotencyKey:"learner-view"});const view=await service.learnerView({id:issued.receipt.id,actorId:actor});const serialized=JSON.stringify(view);for(const hidden of ["sourceEventIds","policyVersion","provenance","actorId","skillId"])assert.equal(serialized.includes(hidden),false);assert.equal(view.claim.length>0,true);});
 
 test("same-skill forged score facts with a wrong task, version, or family cannot issue a receipt", async () => {
   const { actor, store, database, challenge, transferId } = await qualified();

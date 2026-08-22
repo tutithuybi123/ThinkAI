@@ -61,6 +61,7 @@ export interface ProductionRuntime {
   startPublishedPractice(actor:ActorId,revisionId:string,idempotencyKey:string):Promise<unknown>;
   startPublishedTransfer(actor:ActorId,practiceSessionId:ChallengeSessionId,idempotencyKey:string,actorSessionId:string):Promise<unknown>;
   retryPublishedTransfer(actor:ActorId,transferSessionId:string,idempotencyKey:string,actorSessionId:string):Promise<unknown>;
+  issueReceiptForTransfer(actor:ActorId,transferSessionId:string,idempotencyKey:string,actorSessionId:string):Promise<unknown>;
   readonly sessionBootstrap: {
     issueLearner(profile: "clean" | "history"): Promise<{ token: string; actorId: ActorId; role: "learner" }>;
     issueStaff(input: { readonly role: "presenter" | "auditor"; readonly secret: string }): Promise<{ token: string; actorId: ActorId; role: "presenter" | "auditor" }>;
@@ -157,6 +158,7 @@ export async function createProductionRuntime(config: RuntimeConfiguration): Pro
       const binding=await this.transfer.serverBinding(transferSessionId(id),actor);
       return this.startPublishedTransfer(actor,binding.practiceSessionId,`retry:${idempotencyKey}`,actorSessionId);
     },
+    async issueReceiptForTransfer(actor:ActorId,id:string,idempotencyKey:string,actorSessionId:string){const transferId=transferSessionId(id);const binding=await this.transfer.serverBinding(transferId,actor);return this.receipts.issue({actorId:actor,practiceSessionId:binding.practiceSessionId,transferSessionId:transferId,idempotencyKey,actorSessionId});},
     sessionBootstrap: {
       async issueLearner(profile: "clean" | "history"): Promise<{ token: string; actorId: ActorId; role: "learner" }> {
         const actor = profile === "clean" ? config.cleanDemoActorId : config.historyDemoActorId;
@@ -170,7 +172,7 @@ export async function createProductionRuntime(config: RuntimeConfiguration): Pro
     },
     async home(actor: ActorId) { return { actorId: actor, ...deriveLearnerDiscovery(await contentRevisions.listActivePublishedMicroSkills(), await persistence.list(actor)) }; },
     async skills(actor: ActorId) { return deriveLearnerDiscovery(await contentRevisions.listActivePublishedMicroSkills(), await persistence.list(actor)); },
-    async progress(actor: ActorId) { return rebuildLearnerProgress(await persistence.list(actor)); },
+    async progress(actor: ActorId) { const [nodes,events]=await Promise.all([contentRevisions.listActivePublishedMicroSkills(),persistence.list(actor)]);const discovery=deriveLearnerDiscovery(nodes,events);const labels=new Map(nodes.map(node=>[node.microSkill.evidenceSkillId,{title:node.microSkill.title,revisionId:node.microSkill.revisionId}]));return {items:rebuildLearnerProgress(events).flatMap(item=>{const label=labels.get(item.skillId);return label?[{title:label.title,revisionId:label.revisionId,solvedWithSupport:item.solvedWithSupport,demonstratedInChangedSituation:item.demonstratedInChangedSituation,delayedEvidenceObserved:item.delayedEvidenceObserved}]:[];}),nextAction:discovery.nextAction}; },
     async audit(_auditor: ActorId, receiptId: string) {
       const events = await persistence.list();
       const receipt = events.find((stored) => stored.event.type === "capability_receipt_issued" && stored.event.payload.receiptId === receiptId);
