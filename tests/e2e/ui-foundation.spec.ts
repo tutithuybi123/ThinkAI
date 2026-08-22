@@ -12,9 +12,11 @@ test("foundation routes preserve the intended learner and operations shells",asy
   await expect(page.getByLabel("Đáp án của bạn")).toBeVisible();
   await expect(page.getByRole("button",{name:"Gửi bài làm"})).toBeDisabled();
 
+  await page.route("**/api/v1/transfers/demo",route=>route.fulfill({json:{sessionId:"demo",task:{prompt:{body:"Tự giải bài toán mới."},input:"written_solution"},state:{stage:"working"},canReveal:false}}));
   await page.goto("/transfer/demo");
-  await expect(page.getByRole("heading",{name:"Thử vận dụng"})).toBeVisible();
-  await expect(page.getByText("Không có Companion hoặc dữ liệu Bài luyện ở đây.")).toBeVisible();
+  await expect(page.getByRole("heading",{name:"Tự áp dụng trong tình huống mới"})).toBeVisible();
+  await expect(page.getByLabel("Cách bạn lập luận")).toBeVisible();
+  await expect(page.getByText("Practice Companion")).toHaveCount(0);
 
   await page.goto("/ops");
   await expect(page.getByRole("heading",{name:"Content Studio"})).toBeVisible();

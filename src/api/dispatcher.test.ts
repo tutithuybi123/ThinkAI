@@ -73,6 +73,14 @@ test("server-controlled demo bootstrap issues only configured learner identities
   assert.equal((await dispatch({ auth: registry, home: async () => ({}), skills: async () => ({}), progress: async () => ({}), audit: async () => ({}), practice: {}, transfer: {}, receipts: {}, sessionBootstrap: { issueLearner: () => ({ token, actorId: clean, role: "learner" }) } }, { method: "POST", path: "/api/v1/demo/session", body: { profile: "presenter" } })).status, 400);
 });
 
+test("published Transfer start and retry delegate selection to the runtime without accepting client pair or task fields",async()=>{
+  const actor=actorId("actor_transfer_runtime"); const auth=new SignedSessionService("0123456789abcdef0123456789abcdef"); const token=auth.issue({actorId:actor,role:"learner",sessionId:"session_transfer_runtime",ttlMs:60_000}); const calls:string[]=[];
+  const services={auth,home:async()=>({}),skills:async()=>({}),progress:async()=>({}),audit:async()=>({}),practice:{},transfer:{},receipts:{},startPublishedTransfer:async(_actor:unknown,practiceId:string)=>{calls.push(`start:${practiceId}`);return {nextAction:"TRANSFER_STARTED",sessionId:"transfer_runtime"};},retryPublishedTransfer:async(_actor:unknown,transferId:string)=>{calls.push(`retry:${transferId}`);return {nextAction:"NO_FRESH_TRANSFER_AVAILABLE"};}};
+  const headers={authorization:`Bearer ${token}`,"Idempotency-Key":"transfer-runtime"};
+  const started=await dispatch(services,{method:"POST",path:"/api/v1/challenges/challenge_runtime/transfer/start",headers,body:{pairId:"pair_forged",taskId:"task_forged",version:"forged"}}); assert.equal(started.status,201); assert.deepEqual(calls,["start:challenge_runtime"]);
+  const retried=await dispatch(services,{method:"POST",path:"/api/v1/transfers/transfer_runtime/retry",headers:{...headers,"Idempotency-Key":"retry-runtime"},body:{nextItem:"pair_forged"}}); assert.equal(retried.status,201); assert.deepEqual(calls,["start:challenge_runtime","retry:transfer_runtime"]);
+});
+
 test("protected staff bootstrap cannot turn a learner request into an operational role", async () => {
   const signer = new SignedSessionService("0123456789abcdef0123456789abcdef");
   const learner = actorId("actor_demo_clean"); const presenter = actorId("actor_demo_presenter");
