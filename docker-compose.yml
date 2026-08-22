@@ -7,6 +7,7 @@ services:
       # values are otherwise passed through literally, which would leave the
       # database password placeholder unresolved inside the app container.
       THINKAI_DATABASE_URL: postgresql://thinkai:${POSTGRES_PASSWORD}@postgres:5432/thinkai
+      THINKAI_PUBLIC_DEMO_MODE: ${THINKAI_PUBLIC_DEMO_MODE:-0}
     depends_on:
       postgres:
         condition: service_healthy
