@@ -86,3 +86,8 @@ test("fails publication validation when a reviewed pair writes evidence for anot
   const mismatched = { ...node, pairs: [{ ...node.pairs[0]!, practiceContent: { ...node.pairs[0]!.practiceContent, skillId: skillId("skill_other_evidence") } }] };
   assert.equal(validateContentAggregate({ microSkills: [mismatched] }).some((issue) => issue.code === "EVIDENCE_SKILL_PAIR_MISMATCH"), true);
 });
+
+test("rejects duplicate reviewed pair versions before a draft can be published", () => {
+  const node = base();
+  assert.equal(validateContentAggregate({ microSkills: [{ ...node, pairs: [node.pairs[0]!, node.pairs[0]!] }] }).some((issue) => issue.code === "DUPLICATE_PAIR_VERSION"), true);
+});

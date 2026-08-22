@@ -22,6 +22,40 @@ test("foundation routes preserve the intended learner and operations shells",asy
   await expect(page.getByRole("heading",{name:"Content Studio"})).toBeVisible();
 });
 
+test("Ops renders the real revision hierarchy and keeps non-draft revisions read-only", async ({ page }) => {
+  const body = { microSkills: [{ subject: { label: "Toán 10" }, topic: { label: "Hàm số" }, microSkill: { title: "Tìm hệ số góc", evidenceSkillId: "skill_gradient" }, practiceGate: { requiredCorrectCount: 2, maxPracticeItems: 3 }, pairs: [{ id: "pair_gradient_a", version: "1", practiceContent: { id: "task_gradient_p", prompt: { body: "Tìm hệ số góc của đồ thị." }, answerSpec: { kind: "exact_text" } }, transferContent: { id: "task_gradient_t", prompt: { body: "Áp dụng vào tình huống mới." }, answerSpec: { kind: "written_solution" } }, connectionReveal: { title: "Cùng một quan hệ" } }] }] };
+  const revisions = [{ id: "revision_gradient_draft", lifecycle: "DRAFT", body }, { id: "revision_gradient_published", lifecycle: "PUBLISHED", body }];
+  await page.route("**/api/v1/ops/revisions", route => route.fulfill({ json: revisions }));
+  await page.goto("/ops");
+  await page.getByRole("button", { name: /Toán 10/ }).first().click();
+  await expect(page.getByLabel("Subject")).toHaveValue("Toán 10");
+  await expect(page.getByLabel("Practice prompt")).toHaveValue("Tìm hệ số góc của đồ thị.");
+  await expect(page.getByText("TRANSFER · PAIR 1")).toBeVisible();
+  await page.getByRole("button", { name: /Toán 10/ }).nth(1).click();
+  await expect(page.getByText("Revision bất biến")).toBeVisible();
+  await expect(page.getByLabel("Subject")).toHaveCount(0);
+});
+
+test("Ops gives an authorized-session failure a safe retry state", async ({ page }) => {
+  await page.route("**/api/v1/ops/revisions", route => route.fulfill({ status: 403, json: { error: { code: "FORBIDDEN", message: "Content operations require staff authorization." } } }));
+  await page.goto("/ops");
+  await expect(page.getByRole("heading", { name: "Không có quyền hoặc không tải được nội dung" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Thử lại" })).toBeVisible();
+});
+
+test("Ops persists the displayed draft before submitting it for review", async ({ page }) => {
+  const body = { microSkills: [{ subject: { label: "Toán 10" }, topic: { label: "Hàm số" }, microSkill: { title: "Bản nháp cũ", evidenceSkillId: "skill_gradient", revisionId: "revision_gradient_1" }, practiceGate: { requiredCorrectCount: 1, maxPracticeItems: 1 }, pairs: [] }] };
+  let saved: { contentAggregate?: typeof body } | undefined; let reviewed: { revisionId?: string } | undefined;
+  await page.route("**/api/v1/ops/revisions", route => route.fulfill({ json: [{ id: "revision_gradient_draft", lifecycle: "DRAFT", body }] }));
+  await page.route("**/api/v1/ops/revisions/revision_gradient_draft", route => { saved = route.request().postDataJSON(); return route.fulfill({ json: { id: "revision_gradient_draft", lifecycle: "DRAFT", body: saved!.contentAggregate } }); });
+  await page.route("**/api/v1/ops/review", route => { reviewed = route.request().postDataJSON(); return route.fulfill({ json: { id: "revision_gradient_draft", lifecycle: "IN_REVIEW", body: saved!.contentAggregate } }); });
+  await page.goto("/ops"); await page.getByRole("button", { name: /Toán 10/ }).click();
+  await page.getByLabel("MicroSkill", { exact: true }).fill("Bản nháp đang mở");
+  await page.getByRole("button", { name: "Gửi review" }).click();
+  await expect.poll(() => reviewed?.revisionId).toBe("revision_gradient_draft");
+  expect(saved?.contentAggregate?.microSkills[0]?.microSkill?.title).toBe("Bản nháp đang mở");
+});
+
 test("Home and Learn render the learner-safe authored hierarchy and next action", async ({ page }) => {
   const discovery = {
     subjects: [{ id: "subject_math", label: "Toán 10", displayOrder: 1, topics: [{ id: "topic_equation", label: "Phương trình", displayOrder: 1, microSkills: [

@@ -102,6 +102,19 @@ test("protected staff bootstrap cannot turn a learner request into an operationa
   assert.equal(registry.verify((issued.body as { token: string }).token).role, "presenter");
 });
 
+test("Ops endpoints require staff and route revision edits through the shared service", async () => {
+  const auth = new SignedSessionService("0123456789abcdef0123456789abcdef");
+  const learner = actorId("actor_ops_learner"), staff = actorId("actor_ops_staff");
+  const learnerToken = auth.issue({ actorId: learner, role: "learner", sessionId: "session_ops_learner", ttlMs: 60_000 });
+  const staffToken = auth.issue({ actorId: staff, role: "presenter", sessionId: "session_ops_staff", ttlMs: 60_000 });
+  const calls: string[] = [];
+  const services = { auth, home: async () => ({}), skills: async () => ({}), progress: async () => ({}), audit: async () => ({}), practice: {}, transfer: {}, receipts: {}, ops: { list: async () => (calls.push("list"), []), editDraft: async (id: string, body: unknown) => (calls.push(`edit:${id}`), { id, lifecycle: "DRAFT", body }), createDraft: async () => ({}), get: async () => ({}), submitReview: async () => ({}), approve: async () => ({}), publish: async () => ({}), deprecate: async () => ({}) } };
+  assert.equal((await dispatch(services, { method: "GET", path: "/api/v1/ops/revisions", headers: { authorization: `Bearer ${learnerToken}` } })).status, 403);
+  assert.equal((await dispatch(services, { method: "GET", path: "/api/v1/ops/revisions", headers: { authorization: `Bearer ${staffToken}` } })).status, 200);
+  const edit = await dispatch(services, { method: "PUT", path: "/api/v1/ops/revisions/revision_ops_edit", headers: { authorization: `Bearer ${staffToken}` }, body: { contentAggregate: { microSkills: [] } } });
+  assert.equal(edit.status, 200); assert.deepEqual(calls, ["list", "edit:revision_ops_edit"]);
+});
+
 test("presenter reset rotates only the clean learner session through the API boundary", async () => {
   const signer = new SignedSessionService("0123456789abcdef0123456789abcdef");
   const clean = actorId("actor_demo_clean"); const presenter = actorId("actor_demo_presenter");

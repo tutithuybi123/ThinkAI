@@ -23,7 +23,8 @@ export function validateContentAggregate(value: unknown): readonly AggregateIssu
     } else if (!isEvidenceSkillId(node.microSkill.evidenceSkillId)) {
       issues.push({ code: "INVALID_EVIDENCE_SKILL_ID", message: "Evidence skill identity must be a stable skill id." });
     }
-    if (node.pairs.some((pair) => pair.practiceContent.skillId !== node.microSkill.evidenceSkillId || pair.transferContent.skillId !== node.microSkill.evidenceSkillId)) {
+    if (new Set(node.pairs.map((pair) => pair && typeof pair === "object" ? `${(pair as AuthoredReviewedPair).id}@${(pair as AuthoredReviewedPair).version}` : "malformed")).size !== node.pairs.length) issues.push({ code: "DUPLICATE_PAIR_VERSION", message: "Each Practice → Transfer pair version must be unique." });
+    if (node.pairs.some((pair) => !pair || typeof pair !== "object" || (pair as AuthoredReviewedPair).practiceContent?.skillId !== node.microSkill.evidenceSkillId || (pair as AuthoredReviewedPair).transferContent?.skillId !== node.microSkill.evidenceSkillId)) {
       issues.push({ code: "EVIDENCE_SKILL_PAIR_MISMATCH", message: "Every reviewed pair must use the micro-skill evidence identity." });
     }
     const { nextMicroSkillId: _next, ...identity } = node.microSkill; issues.push(...validateMicroSkillAggregate({ ...node, microSkill: { ...identity, prerequisiteMicroSkillIds: [] } }));
