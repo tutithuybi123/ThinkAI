@@ -23,7 +23,7 @@ integration("production runtime executes only the exact PostgreSQL published rev
     const view = await runtime.practice.learnerView(practiceId, actor); assert.match(view.task.prompt.body, /^Practice/);
     await runtime.practice.recordAttempt({ sessionId: practiceId, actorId: actor, idempotencyKey: "attempt" }); await runtime.practice.submit({ sessionId: practiceId, actorId: actor, answer: "ok", idempotencyKey: "submit" });
     assert.equal((await runtime.practiceLearnerView(actor, practiceId) as { nextAction: string }).nextAction, "READY_FOR_TRANSFER");
-    const transfer = await runtime.startPublishedTransfer(actor, practiceId, "transfer", "technical-session") as { sessionId: string }; await runtime.transfer.submit({ sessionId: transfer.sessionId as never, actorId: actor, answer: "ok", idempotencyKey: "transfer-submit" });
+    const transfer = await runtime.startPublishedTransfer(actor, practiceId, "transfer", undefined as never) as { sessionId: string }; await runtime.transfer.submit({ sessionId: transfer.sessionId as never, actorId: actor, answer: "ok", idempotencyKey: "transfer-submit" });
     const reveal = await runtime.transfer.revealConnection({ sessionId: transfer.sessionId as never, actorId: actor, idempotencyKey: "reveal" }); assert.equal(reveal.reveal.title, "Liên hệ");
   } finally { await runtime?.close(); await admin.query(`DROP DATABASE IF EXISTS ${database}`); await admin.close(); }
 });
