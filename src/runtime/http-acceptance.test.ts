@@ -101,8 +101,11 @@ async function runGoldenFlow(server: RunningServer, suffix: string): Promise<{ r
   expectStatus(await request(server.origin, "POST", `/api/v1/challenges/${challengeId}/attempts`, { cookie: cleanCookie, idempotencyKey: `attempt-${suffix}`, body: { kind: "attempt" } }), 200);
   expectStatus(await request(server.origin, "POST", `/api/v1/challenges/${challengeId}/interventions/hint_fixture_1/open`, { cookie: cleanCookie, idempotencyKey: `hint-${suffix}`, body: {} }), 200);
   expectStatus(await request(server.origin, "POST", `/api/v1/challenges/${challengeId}/submissions`, { cookie: cleanCookie, idempotencyKey: `solve-${suffix}`, body: { answer: "fixture" } }), 200);
-  const transferId = `transfer_runtime_${suffix}`;
-  const transfer = expectStatus(await request(server.origin, "POST", `/api/v1/challenges/${challengeId}/transfer/start`, { cookie: cleanCookie, idempotencyKey: `transfer-start-${suffix}`, body: { sessionId: transferId } }), 201);
+  const requestedTransferId = `transfer_runtime_${suffix}`;
+  const transfer = expectStatus(await request(server.origin, "POST", `/api/v1/challenges/${challengeId}/transfer/start`, { cookie: cleanCookie, idempotencyKey: `transfer-start-${suffix}`, body: { sessionId: requestedTransferId } }), 201);
+  const transferIdValue = transfer.body.sessionId;
+  if (typeof transferIdValue !== "string") throw new Error("Transfer start response did not contain a server-issued session ID.");
+  const transferId = transferIdValue;
   assert.equal(JSON.stringify(transfer.body).includes("hint_fixture"), false, "transfer view must remain isolated from practice hint context");
   expectStatus(await request(server.origin, "GET", `/api/v1/transfers/${transferId}`, { cookie: cleanCookie }), 200);
   expectStatus(await request(server.origin, "POST", `/api/v1/transfers/${transferId}/submissions`, { cookie: cleanCookie, idempotencyKey: `transfer-submit-${suffix}`, body: { answer: "fixture" } }), 200);
@@ -164,7 +167,7 @@ acceptance("actual Next HTTP runtime accepts the explicitly test-only structural
       const concurrent = await Promise.all([request(server.origin, "POST", `/api/v1/challenges/${concurrentId}/attempts`, { cookie: freshCookie, idempotencyKey: "concurrent-a", body: { kind: "attempt" } }), request(server.origin, "POST", `/api/v1/challenges/${concurrentId}/attempts`, { cookie: freshCookie, idempotencyKey: "concurrent-b", body: { kind: "attempt" } })]);
       assert.ok(concurrent.every((item) => item.status === 200 || item.status === 409), "distinct concurrent mutation responses must be success or typed conflict");
       const resumed = expectStatus(await request(server.origin, "GET", `/api/v1/challenges/${concurrentId}`, { cookie: freshCookie }), 200);
-      const attempts = ((resumed.body as { attemptCount?: unknown }).attemptCount); assert.ok(attempts === 1 || attempts === 2, "concurrent writes must leave a monotonic resumed state");
+      const attempts = ((resumed.body as { state?: { attemptCount?: unknown } }).state?.attemptCount); assert.ok(attempts === 1 || attempts === 2, "concurrent writes must leave a monotonic resumed state");
     } finally { await runtimeDatabase.close(); }
     await stopRuntime(server); server = undefined;
     await createCleanDatabase(admin);

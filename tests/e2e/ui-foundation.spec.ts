@@ -96,6 +96,18 @@ test("Practice renders authoritative result before secondary Process Feedback",a
   await expect(page.getByText("Bạn đã chọn một hướng giải rõ ràng.")).toBeVisible();
 });
 
+test("Practice preserves a draft and presents bounded Companion assistance separately",async({page})=>{
+  await page.route("**/api/v1/challenges/draft",route=>route.fulfill({json:{sessionId:"draft",context:{label:"Bài luyện"},task:{prompt:{body:"Tìm nghiệm."},input:"text"},progress:{ordinal:1,label:"Bài luyện hiện tại"},state:{},nextAction:"submit"}}));
+  await page.route("**/api/v1/challenges/draft/companion",route=>route.fulfill({json:{delivery:"Hãy thử xác định điều kiện trước."}}));
+  await page.goto("/practice/draft");
+  await page.getByLabel("Đáp án của bạn").fill("x = 2");
+  await page.getByLabel("Nhắn Practice Companion").fill("Em chưa biết bắt đầu từ đâu");
+  await page.getByRole("button",{name:"Yêu cầu một gợi ý"}).click();
+  await expect(page.getByText("Hãy thử xác định điều kiện trước.")).toBeVisible();
+  await page.reload();
+  await expect(page.getByLabel("Đáp án của bạn")).toHaveValue("x = 2");
+});
+
 test("Home provides a concrete retry after a discovery request fails", async ({ page }) => {
   let attempts = 0;
   await page.route("**/api/v1/home", (route) => {

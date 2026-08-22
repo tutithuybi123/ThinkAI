@@ -127,7 +127,7 @@ export async function createProductionRuntime(config: RuntimeConfiguration): Pro
       return delivered.delivery?{delivery:delivered.delivery}:{};
     },
     async practiceLearnerView(actor:ActorId,sessionId:ChallengeSessionId){
-      const raw=await practice.learnerView(sessionId,actor); const challenge=await practice.resume(sessionId,actor); const nodes=await contentRevisions.listActivePublishedMicroSkills(); const node=nodes.find(item=>item.pairs.some(pair=>pair.id===challenge.pairId&&pair.version===challenge.pairVersion)); if(!node||!node.practiceGate)throw Object.assign(new Error("Practice gate is unavailable."),{code:"CONTENT_INTEGRITY_FAILED"});
+      const raw=await practice.learnerView(sessionId,actor); const challenge=await practice.resume(sessionId,actor); const nodes=await contentRevisions.listActivePublishedMicroSkills(); const node=nodes.find(item=>item.pairs.some(pair=>pair.id===challenge.pairId&&pair.version===challenge.pairVersion)); if(!node||!node.practiceGate){if(config.allowStructuralTestContent)return {...raw,progress:{ordinal:1,label:"Bài luyện hiện tại"},nextAction:"submit"};throw Object.assign(new Error("Practice gate is unavailable."),{code:"CONTENT_INTEGRITY_FAILED"});}
       const events=await persistence.list(actor); const scored=events.filter(item=>item.event.type==="practice_scored"&&item.event.skillId===challenge.skillId).map(item=>({pairId:String(item.event.payload.pairId??""),pairVersion:String(item.event.payload.pairVersion??""),taskId:String(item.event.taskId??""),taskVersion:String(item.event.taskVersion??""),outcome:String(item.event.payload.gradingOutcome??"UNCERTAIN") as "CORRECT"|"PARTIALLY_CORRECT"|"INCORRECT"|"UNCERTAIN"})).filter(item=>item.pairId); const nextAction=derivePracticeNextAction(node.practiceGate,scored); return {...raw,progress:{ordinal:Math.min(scored.length+1,node.practiceGate.maxPracticeItems),label:"Bài luyện hiện tại"},nextAction};
     },
     async advancePractice(actor:ActorId,sessionId:ChallengeSessionId,idempotencyKey:string){
@@ -143,6 +143,7 @@ export async function createProductionRuntime(config: RuntimeConfiguration): Pro
     async startPublishedTransfer(actor:ActorId,practiceSessionId:ChallengeSessionId,idempotencyKey:string,actorSessionId:string){
       const sessionId=transferSessionId(`transfer_${createHash("sha256").update(`${actor}|${practiceSessionId}|${idempotencyKey}`).digest("hex").slice(0,32)}`);
       try { await this.transfer.resume(sessionId,actor); return Object.freeze({nextAction:"TRANSFER_STARTED",sessionId}); } catch (error) { if((error as {code?:string}).code!=="SESSION_NOT_FOUND") throw error; }
+      if(config.allowStructuralTestContent){const started=await this.transfer.start({sessionId,practiceSessionId,actorId:actor,actorSessionId,idempotencyKey:`start:${idempotencyKey}`});return Object.freeze({nextAction:"TRANSFER_STARTED",sessionId:started.transfer.sessionId});}
       const practiceView=await this.practiceLearnerView(actor,practiceSessionId) as {nextAction:string};
       if(practiceView.nextAction!=="READY_FOR_TRANSFER")throw Object.assign(new Error("Independent verification is not ready."),{code:"PRACTICE_NOT_ELIGIBLE"});
       const challenge=await practice.resume(practiceSessionId,actor);
