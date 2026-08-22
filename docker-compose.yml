@@ -2,6 +2,11 @@ services:
   app:
     build: .
     env_file: .env.production
+    environment:
+      # Compose interpolates this from the deployment environment.  `env_file`
+      # values are otherwise passed through literally, which would leave the
+      # database password placeholder unresolved inside the app container.
+      THINKAI_DATABASE_URL: postgresql://thinkai:${POSTGRES_PASSWORD}@postgres:5432/thinkai
     depends_on:
       postgres:
         condition: service_healthy
