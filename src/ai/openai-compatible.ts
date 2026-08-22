@@ -3,10 +3,15 @@ export function providerConfigFromEnvironment(env:NodeJS.ProcessEnv=process.env)
 export class OpenAICompatibleProvider {
   constructor(private readonly config:ProviderConfig,private readonly fetcher:typeof fetch=fetch){}
   async complete(input:{system:string;user:string}):Promise<{provider:"tokenrouter"|"openrouter";model:string;text:string}>{
-    const response=await this.fetcher(`${this.config.baseUrl.replace(/\/$/,"")}/chat/completions`,{method:"POST",headers:{Authorization:`Bearer ${this.config.apiKey}`,"content-type":"application/json"},body:JSON.stringify({model:this.config.model,temperature:0,messages:[{role:"system",content:input.system},{role:"user",content:input.user}]})});
-    if(!response.ok)throw new Error(`AI_PROVIDER_HTTP_${response.status}`);
-    const body=await response.json() as {model?:unknown;choices?:{message?:{content?:unknown}}[]}; const text=body.choices?.[0]?.message?.content;
-    if(typeof text!=="string"||!text.trim())throw new Error("AI_PROVIDER_MALFORMED");
+    let response:Response;
+    try { response=await this.fetcher(`${this.config.baseUrl.replace(/\/$/,"")}/chat/completions`,{method:"POST",headers:{Authorization:`Bearer ${this.config.apiKey}`,"content-type":"application/json"},body:JSON.stringify({model:this.config.model,temperature:0,messages:[{role:"system",content:input.system},{role:"user",content:input.user}]})}); }
+    catch { throw Object.assign(new Error("AI service is unavailable."),{code:"AI_UNAVAILABLE"}); }
+    if(!response.ok)throw Object.assign(new Error("AI service is unavailable."),{code:"AI_UNAVAILABLE"});
+    let body:{model?:unknown;choices?:{message?:{content?:unknown}}[]};
+    try { body=await response.json() as {model?:unknown;choices?:{message?:{content?:unknown}}[]}; }
+    catch { throw Object.assign(new Error("AI service is unavailable."),{code:"AI_UNAVAILABLE"}); }
+    const text=body.choices?.[0]?.message?.content;
+    if(typeof text!=="string"||!text.trim())throw Object.assign(new Error("AI service is unavailable."),{code:"AI_UNAVAILABLE"});
     return{provider:this.config.provider,model:typeof body.model==="string"?body.model:this.config.model,text};
   }
 }
