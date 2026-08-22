@@ -6,10 +6,11 @@ test("foundation routes preserve the intended learner and operations shells",asy
   await expect(page.getByRole("heading",{name:"Lộ trình theo môn học"})).toBeVisible();
   await expect(page.getByRole("link",{name:"Khám phá môn học"})).toBeVisible();
 
+  await page.route("**/api/v1/challenges/demo", (route) => route.fulfill({ json: { sessionId:"demo",context:{label:"Bài luyện"},task:{prompt:{format:"plain_text",body:"Tìm nghiệm của phương trình."},assets:[],input:"text",requiresWrittenSolution:false},progress:{ordinal:1,label:"Bài luyện hiện tại"},state:{stage:"ready",attemptCount:0,submissionCount:0},assistance:{available:true},nextAction:"submit" } }));
   await page.goto("/practice/demo");
   await expect(page.getByRole("heading",{name:"Bài luyện",exact:true})).toBeVisible();
+  await expect(page.getByLabel("Đáp án của bạn")).toBeVisible();
   await expect(page.getByRole("button",{name:"Gửi bài làm"})).toBeDisabled();
-  await expect(page.getByRole("button",{name:"Đang xử lý…"})).toBeDisabled();
 
   await page.goto("/transfer/demo");
   await expect(page.getByRole("heading",{name:"Thử vận dụng"})).toBeVisible();
@@ -49,6 +50,14 @@ test("Home starts only the server-selected Practice handoff for a first-use lear
   await page.goto("/");
   await page.getByRole("button", { name: "Mở bài luyện" }).click();
   await expect(page).toHaveURL(/\/practice\/challenge_factor$/);
+});
+
+test("Practice renders authoritative result before secondary Process Feedback",async({page})=>{
+  await page.route("**/api/v1/challenges/result",route=>route.fulfill({json:{sessionId:"result",context:{label:"Bài luyện"},task:{prompt:{body:"Tìm nghiệm."},input:"text"},progress:{ordinal:1,label:"Bài luyện hiện tại"},state:{outcome:"CORRECT"},nextAction:"READY_FOR_TRANSFER"}}));
+  await page.route("**/api/v1/challenges/result/process-feedback",route=>route.fulfill({json:{message:"Bạn đã chọn một hướng giải rõ ràng."}}));
+  await page.goto("/practice/result");
+  await expect(page.getByText("Đúng",{exact:true})).toBeVisible();
+  await expect(page.getByText("Bạn đã chọn một hướng giải rõ ràng.")).toBeVisible();
 });
 
 test("Home provides a concrete retry after a discovery request fails", async ({ page }) => {
