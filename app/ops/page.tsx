@@ -25,7 +25,7 @@ export default function OpsPage() {
   const load = async () => {
     setError(undefined);
     try { setRevisions(await requestJson<Revision[]>("/api/v1/ops/revisions")); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : "Không thể mở Content Studio."); }
+    catch (reason) { try { await requestJson("/api/v1/demo/staff-session", { method: "POST", body: { role: "presenter" } }); setRevisions(await requestJson<Revision[]>("/api/v1/ops/revisions")); } catch { setError(reason instanceof Error ? reason.message : "Không thể mở Content Studio."); } }
   };
   useEffect(() => { void load(); }, []);
 
