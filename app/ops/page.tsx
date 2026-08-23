@@ -233,8 +233,8 @@ export default function OpsPage() {
       ...pair,
       [role]: change(pair[role] ?? {}),
     }));
-  const save = async () => {
-    if (!selected || !draft) return;
+  const save = async (): Promise<boolean> => {
+    if (!selected || !draft) return false;
     setSaving(true);
     setError(undefined);
     try {
@@ -248,8 +248,10 @@ export default function OpsPage() {
       );
       choose(revision);
       await load();
+      return true;
     } catch (reason) {
       setError("Không thể lưu thay đổi. Nội dung bạn nhập vẫn được giữ.");
+      return false;
     } finally {
       setSaving(false);
     }
@@ -277,6 +279,7 @@ export default function OpsPage() {
   };
   const addPair = async () => {
     if (!selected) return;
+    if (dirty && !(await save())) return;
     setSaving(true);
     try {
       const revision = await requestJson<Revision>(
