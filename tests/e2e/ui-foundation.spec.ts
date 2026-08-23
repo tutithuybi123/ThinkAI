@@ -376,6 +376,67 @@ test("Ops saves an edited draft before adding another server-owned pair", async 
   ).toBeVisible();
 });
 
+test("Ops lets a teacher reorder and remove unsaved draft pairs", async ({
+  page,
+}) => {
+  const body = {
+    microSkills: [
+      {
+        subject: { label: "Toán 10" },
+        topic: { label: "Hàm số" },
+        microSkill: {
+          title: "Kỹ năng ghép cặp",
+          revisionId: "revision_pair_controls",
+        },
+        practiceGate: { requiredCorrectCount: 1, maxPracticeItems: 2 },
+        pairs: [
+          {
+            id: "pair_1",
+            practiceContent: {
+              prompt: { body: "Bài luyện đầu" },
+              answerSpec: { kind: "exact_text", accepted: [] },
+            },
+            transferContent: {
+              prompt: { body: "Bài vận dụng đầu" },
+              answerSpec: { kind: "exact_text", accepted: [] },
+            },
+            connectionReveal: {},
+          },
+          {
+            id: "pair_2",
+            practiceContent: {
+              prompt: { body: "Bài luyện sau" },
+              answerSpec: { kind: "exact_text", accepted: [] },
+            },
+            transferContent: {
+              prompt: { body: "Bài vận dụng sau" },
+              answerSpec: { kind: "exact_text", accepted: [] },
+            },
+            connectionReveal: {},
+          },
+        ],
+      },
+    ],
+  };
+  await page.route("**/api/v1/ops/revisions", (route) =>
+    route.fulfill({
+      json: [{ id: "revision_pair_controls", lifecycle: "DRAFT", body }],
+    }),
+  );
+  await page.route(
+    "**/api/v1/ops/revisions/revision_pair_controls/readiness",
+    (route) => route.fulfill({ json: { ready: false, issues: [] } }),
+  );
+  await page.goto("/ops");
+  await page.getByRole("button", { name: /Toán 10/ }).click();
+  await page.getByRole("button", { name: "Đưa cặp 2 lên" }).click();
+  await expect(page.getByLabel("Đề bài").first()).toHaveValue("Bài luyện sau");
+  await page.getByRole("button", { name: "Xóa cặp 2" }).click();
+  await expect(
+    page.getByText("Bài luyện 2 ↔ Bài vận dụng 2", { exact: true }),
+  ).toHaveCount(0);
+});
+
 test("Ops persists the displayed draft before submitting it for review", async ({
   page,
 }) => {

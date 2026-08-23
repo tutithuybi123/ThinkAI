@@ -224,6 +224,21 @@ export default function OpsPage() {
         i === index ? change(pair) : pair,
       ),
     }));
+  const removePair = (index: number) =>
+    updateNode((current) => ({
+      ...current,
+      pairs: (current.pairs ?? []).filter(
+        (_, itemIndex) => itemIndex !== index,
+      ),
+    }));
+  const movePair = (index: number, direction: -1 | 1) =>
+    updateNode((current) => {
+      const pairs = [...(current.pairs ?? [])];
+      const destination = index + direction;
+      if (destination < 0 || destination >= pairs.length) return current;
+      [pairs[index], pairs[destination]] = [pairs[destination]!, pairs[index]!];
+      return { ...current, pairs };
+    });
   const updateTask = (
     index: number,
     role: "practiceContent" | "transferContent",
@@ -459,6 +474,8 @@ export default function OpsPage() {
                 onUpdateNode={updateNode}
                 onUpdateTask={updateTask}
                 onUpdatePair={updatePair}
+                onRemovePair={removePair}
+                onMovePair={movePair}
                 onAddPair={() => void addPair()}
                 onNewVersion={() => void createNextVersion()}
                 onSave={() => void save()}
@@ -670,6 +687,8 @@ function Editor({
   onUpdateNode,
   onUpdateTask,
   onUpdatePair,
+  onRemovePair,
+  onMovePair,
   onAddPair,
   onNewVersion,
   onSave,
@@ -689,6 +708,8 @@ function Editor({
     change: (task: Task) => Task,
   ) => void;
   onUpdatePair: (index: number, change: (pair: Pair) => Pair) => void;
+  onRemovePair: (index: number) => void;
+  onMovePair: (index: number, direction: -1 | 1) => void;
   onAddPair: () => void;
   onNewVersion: () => void;
   onSave: () => void;
@@ -777,6 +798,10 @@ function Editor({
                 index={index}
                 onTask={onUpdateTask}
                 onPair={onUpdatePair}
+                onRemove={() => onRemovePair(index)}
+                onMove={(direction) => onMovePair(index, direction)}
+                canMoveUp={index > 0}
+                canMoveDown={index < pairs.length - 1}
               />
             ))}
           </section>
@@ -890,6 +915,10 @@ function PairEditor({
   index,
   onTask,
   onPair,
+  onRemove,
+  onMove,
+  canMoveUp,
+  canMoveDown,
 }: {
   pair: Pair;
   index: number;
@@ -899,14 +928,48 @@ function PairEditor({
     change: (task: Task) => Task,
   ) => void;
   onPair: (index: number, change: (pair: Pair) => Pair) => void;
+  onRemove: () => void;
+  onMove: (direction: -1 | 1) => void;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
 }) {
   return (
     <article className="ops-pair">
       <div className="ops-pair-heading">
-        <strong>Cặp {index + 1}</strong>
-        <small>
-          Bài luyện {index + 1} ↔ Bài vận dụng {index + 1}
-        </small>
+        <div>
+          <strong>Cặp {index + 1}</strong>
+          <small>
+            Bài luyện {index + 1} ↔ Bài vận dụng {index + 1}
+          </small>
+        </div>
+        <div
+          className="ops-pair-actions"
+          aria-label={`Quản lý cặp ${index + 1}`}
+        >
+          <Button
+            tone="quiet"
+            aria-label={`Đưa cặp ${index + 1} lên`}
+            disabled={!canMoveUp}
+            onClick={() => onMove(-1)}
+          >
+            Lên
+          </Button>
+          <Button
+            tone="quiet"
+            aria-label={`Đưa cặp ${index + 1} xuống`}
+            disabled={!canMoveDown}
+            onClick={() => onMove(1)}
+          >
+            Xuống
+          </Button>
+          <Button
+            tone="quiet"
+            aria-label={`Xóa cặp ${index + 1}`}
+            onClick={onRemove}
+          >
+            Xóa
+          </Button>
+        </div>
       </div>
       <TaskEditor
         title={`Bài luyện ${index + 1}`}
