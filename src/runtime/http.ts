@@ -17,6 +17,7 @@ export function apiServicesFromRuntime(runtime: ProductionRuntime): ApiServices 
     startPublishedTransfer: runtime.startPublishedTransfer,
     retryPublishedTransfer: runtime.retryPublishedTransfer,
     issueReceiptForTransfer: runtime.issueReceiptForTransfer,
+    practiceCompanion: runtime.practiceCompanion,
     practiceLearnerView: runtime.practiceLearnerView,
     advancePractice: runtime.advancePractice,
     practiceProcessFeedback: runtime.practiceProcessFeedback,

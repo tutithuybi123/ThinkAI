@@ -12,4 +12,6 @@ test("production API composition exposes server-owned Practice view, continuatio
  assert.equal((await handleHttp(runtime,{method:"GET",path:`/api/v1/challenges/${session}/process-feedback`,headers})).status,200);
  assert.equal((await handleHttp(runtime,{method:"POST",path:`/api/v1/challenges/${session}/next`,headers,body:{}})).status,200);
  assert.equal(typeof services.advancePractice,"function");
+ assert.equal(typeof services.practiceCompanion,"function");
+ assert.equal((await handleHttp(runtime,{method:"POST",path:`/api/v1/challenges/${session}/companion`,headers,body:{message:"help"}})).status,200);
 });
