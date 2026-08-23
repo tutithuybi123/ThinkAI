@@ -52,7 +52,10 @@ export class OpsService {
           typeof node === "object" &&
           !!node.subject &&
           !!node.topic &&
-          !!node.microSkill,
+          !!node.microSkill &&
+          typeof node.subject.label === "string" &&
+          typeof node.topic.label === "string" &&
+          typeof node.microSkill.title === "string",
       );
     const existingSubject = nodes.find(
       (node) => normalized(node.subject.label) === subjectLabel,

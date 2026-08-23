@@ -111,7 +111,9 @@ test("Ops ignores historical structural revisions that do not contain authoring 
   const legacy = {
     id: "revision_legacy",
     lifecycle: "DEPRECATED",
-    body: { microSkills: [{}] },
+    body: {
+      microSkills: [{}, { subject: {}, topic: {}, microSkill: {} }],
+    },
   };
   const ops = new OpsService({
     listRevisions: async () => [legacy],
