@@ -114,6 +114,12 @@ export class OpsService {
         prerequisiteMicroSkillIds: [],
       },
       pairs: [],
+      practiceGate: {
+        policyVersion: "practice-gate/v1",
+        strategy: "distinct-correct-count",
+        requiredCorrectCount: 1,
+        maxPracticeItems: 1,
+      },
     };
     return this.createDraft({ id: revisionId, body: { microSkills: [node] } });
   }

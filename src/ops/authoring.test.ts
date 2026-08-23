@@ -24,6 +24,12 @@ test("Ops creates an initial teacher-facing draft with server-owned identities",
   assert.equal(node.microSkill.revisionId, draft.id);
   assert.match(node.microSkill.evidenceSkillId, /^skill_/);
   assert.equal(node.pairs.length, 0);
+  assert.deepEqual(node.practiceGate, {
+    policyVersion: "practice-gate/v1",
+    strategy: "distinct-correct-count",
+    requiredCorrectCount: 1,
+    maxPracticeItems: 1,
+  });
   assert.equal(created.length, 1);
 });
 
