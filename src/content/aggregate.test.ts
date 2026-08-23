@@ -100,6 +100,13 @@ test("published snapshots with reused pair versions retain distinct executable i
   assert.notEqual(createPublishedPairSnapshot(original, original.pairs[0]!).integrityKey, createPublishedPairSnapshot(revised, revised.pairs[0]!).integrityKey);
 });
 
+test("published snapshots bind the authored micro-skill revision even when pair content is unchanged", () => {
+  const original = base();
+  const revision = contentRevisionId("revision_gradient_2");
+  const revised = { ...base(), microSkill: { ...base().microSkill, revisionId: revision }, pairs: base().pairs.map(item => ({ ...item, microSkillRevisionId: revision })) };
+  assert.notEqual(createPublishedPairSnapshot(original, original.pairs[0]!).integrityKey, createPublishedPairSnapshot(revised, revised.pairs[0]!).integrityKey);
+});
+
 test("requires reviewed learner-facing labels for the published hierarchy", () => {
   const node = base();
   assert.equal(validateContentAggregate({ microSkills: [node] }).length, 0);

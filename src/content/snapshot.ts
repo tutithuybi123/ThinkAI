@@ -66,7 +66,7 @@ export function createPublishedPairSnapshot(aggregate: MicroSkillAggregate, sele
     relationMapping: Object.freeze({ title: authored.connectionReveal.title, sharedRelation: authored.connectionReveal.sharedRelation, explanation: immutableCopy(authored.connectionReveal.explanation), practiceHighlights: Object.freeze([]), transferHighlights: Object.freeze([]) }), review,
   });
   const base = createReviewedPairSnapshot(pair, practiceTask, transferTask, []);
-  return Object.freeze({ ...base, microSkillRevisionId: aggregate.microSkill.revisionId, runtimeContent: freezeRuntimeContent(pair, practiceTask, transferTask, []) });
+  return Object.freeze({ ...base, integrityKey: `${base.integrityKey}|revision:${aggregate.microSkill.revisionId}`, microSkillRevisionId: aggregate.microSkill.revisionId, runtimeContent: freezeRuntimeContent(pair, practiceTask, transferTask, []) });
 }
 
 /** Resolves only material stored in the evidence snapshot; it never consults a latest revision. */
@@ -74,7 +74,8 @@ export function runtimeContentFromSnapshot(snapshot: ReviewedPairSnapshot): Read
   if (!snapshot.runtimeContent) throw new Error("Persisted snapshot has no executable reviewed content.");
   const value = snapshot.runtimeContent;
   const current = createReviewedPairSnapshot(value.pair, value.practiceTask, value.transferTask, value.interventions);
-  if (current.integrityKey !== snapshot.integrityKey && (!isLegacyIntegrityKey(snapshot.integrityKey) || legacyIntegrityKey(value.pair, value.practiceTask, value.transferTask, value.interventions) !== snapshot.integrityKey)) throw new Error(`Content snapshot integrity mismatch for ${snapshot.pair.id}.`);
+  const revisionBound = snapshot.microSkillRevisionId ? `${current.integrityKey}|revision:${snapshot.microSkillRevisionId}` : current.integrityKey;
+  if (current.integrityKey !== snapshot.integrityKey && revisionBound !== snapshot.integrityKey && (!isLegacyIntegrityKey(snapshot.integrityKey) || legacyIntegrityKey(value.pair, value.practiceTask, value.transferTask, value.interventions) !== snapshot.integrityKey)) throw new Error(`Content snapshot integrity mismatch for ${snapshot.pair.id}.`);
   return value;
 }
 
