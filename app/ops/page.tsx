@@ -150,7 +150,10 @@ export default function OpsPage() {
   const [error, setError] = useState<string>();
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
-  const [readiness, setReadiness] = useState<{ ready: boolean; issues: string[] }>();
+  const [readiness, setReadiness] = useState<{
+    ready: boolean;
+    issues: string[];
+  }>();
   const load = async () => {
     setError(undefined);
     try {
@@ -175,7 +178,15 @@ export default function OpsPage() {
     void load();
   }, []);
   const loadReadiness = async (revisionId: string) => {
-    try { setReadiness(await requestJson<{ ready: boolean; issues: string[] }>(`/api/v1/ops/revisions/${revisionId}/readiness`)); } catch { setReadiness(undefined); }
+    try {
+      setReadiness(
+        await requestJson<{ ready: boolean; issues: string[] }>(
+          `/api/v1/ops/revisions/${revisionId}/readiness`,
+        ),
+      );
+    } catch {
+      setReadiness(undefined);
+    }
   };
   const choose = (revision: Revision) => {
     setSelected(revision);
@@ -285,7 +296,10 @@ export default function OpsPage() {
     setSaving(true);
     setError(undefined);
     try {
-      const revision = await requestJson<Revision>(`/api/v1/ops/revisions/${selected.id}/next-draft`, { method: "POST", body: {}, idempotencyKey: idempotencyKey() });
+      const revision = await requestJson<Revision>(
+        `/api/v1/ops/revisions/${selected.id}/next-draft`,
+        { method: "POST", body: {}, idempotencyKey: idempotencyKey() },
+      );
       choose(revision);
       await load();
     } catch {
@@ -422,9 +436,11 @@ export default function OpsPage() {
             {creating ? (
               <CreationForm
                 form={createForm}
-                existing={revisions ?? []}
+                existing={(revisions ?? []).filter(
+                  (revision) => !isTechnical(revision),
+                )}
                 saving={saving}
-          error={error}
+                error={error}
                 onChange={setCreateForm}
                 onCancel={() => setCreating(false)}
                 onCreate={() => void create()}
@@ -436,7 +452,7 @@ export default function OpsPage() {
                 editable={editable}
                 saving={saving}
                 dirty={dirty}
-          error={error}
+                error={error}
                 onUpdateNode={updateNode}
                 onUpdateTask={updateTask}
                 onUpdatePair={updatePair}
@@ -781,8 +797,12 @@ function Editor({
           </StatePanel>
           <Preview node={node} lifecycle={revision.lifecycle} />
           <div className="state-panel-actions">
-            {revision.lifecycle === "PUBLISHED" || revision.lifecycle === "DEPRECATED" ? (
-              <Button loading={saving} onClick={onNewVersion}>Tạo phiên bản mới</Button>
+            {revision.lifecycle === "APPROVED" ||
+            revision.lifecycle === "PUBLISHED" ||
+            revision.lifecycle === "DEPRECATED" ? (
+              <Button loading={saving} onClick={onNewVersion}>
+                Tạo phiên bản mới
+              </Button>
             ) : null}
             {revision.lifecycle === "IN_REVIEW" ? (
               <Button loading={saving} onClick={() => onLifecycle("approve")}>
@@ -1035,7 +1055,9 @@ function RubricEditor({
         onChange={(e) =>
           update((current) => ({
             ...current,
-            referenceSolutions: [{ format: "plain_text", body: e.target.value }],
+            referenceSolutions: [
+              { format: "plain_text", body: e.target.value },
+            ],
           }))
         }
       />
@@ -1048,7 +1070,7 @@ function RubricEditor({
             onChange={(e) =>
               update((current) => ({
                 ...current,
-              criteria: (current.criteria ?? []).map((item, i) =>
+                criteria: (current.criteria ?? []).map((item, i) =>
                   i === index ? { ...item, description: e.target.value } : item,
                 ),
                 gradingShape: {
@@ -1065,7 +1087,9 @@ function RubricEditor({
             onClick={() =>
               update((current) => ({
                 ...current,
-              criteria: (current.criteria ?? []).filter((_, i) => i !== index),
+                criteria: (current.criteria ?? []).filter(
+                  (_, i) => i !== index,
+                ),
                 gradingShape: {
                   ...current.gradingShape!,
                   requiredCriterionIds: (
@@ -1120,7 +1144,24 @@ function RubricEditor({
     </div>
   );
 }
-function ReviewReadiness({ readiness }: { readiness?: { ready: boolean; issues: string[] } | undefined }) {
+const readinessMessage = (issue: string): string =>
+  ({
+    EMPTY_PUBLISHED_PAIR_BANK: "Chưa có cặp Bài luyện – Bài vận dụng.",
+    MISSING_PRACTICE_GATE: "Chưa đặt điều kiện chuyển sang Bài vận dụng.",
+    INVALID_PRACTICE_GATE: "Điều kiện luyện tập chưa hợp lệ.",
+    INSUFFICIENT_PRACTICE_PAIR_BANK:
+      "Cần thêm cặp tình huống để đủ số bài luyện tối đa.",
+    INVALID_PAIR_BANK_RELATION:
+      "Một cặp bài chưa có đủ đề bài, đáp án hoặc nội dung Reveal.",
+    INVALID_ANSWER_SPEC: "Một bài chưa có kiểu trả lời hoặc đáp án hợp lệ.",
+    INVALID_REVIEWED_RUBRIC: "Rubric bài tự luận chưa hợp lệ.",
+  })[issue] ?? "Một phần nội dung chưa sẵn sàng để gửi duyệt.";
+
+function ReviewReadiness({
+  readiness,
+}: {
+  readiness?: { ready: boolean; issues: string[] } | undefined;
+}) {
   return (
     <section className="ops-section">
       <div className="section-label">I · KIỂM TRA TRƯỚC KHI GỬI DUYỆT</div>
@@ -1129,7 +1170,7 @@ function ReviewReadiness({ readiness }: { readiness?: { ready: boolean; issues: 
           ? "Server sẽ kiểm tra nội dung khi bạn lưu hoặc gửi duyệt."
           : readiness.ready
             ? "Nội dung đã sẵn sàng để gửi server kiểm tra khi review/publish."
-            : `Cần hoàn thiện: ${readiness.issues.join(", ")}.`}
+            : `Cần hoàn thiện: ${readiness.issues.map(readinessMessage).join(" ")}`}
       </p>
     </section>
   );

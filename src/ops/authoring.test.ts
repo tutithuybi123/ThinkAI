@@ -41,6 +41,12 @@ test("Ops reuses an existing subject and topic identity by teacher-facing labels
             label: "Hàm số bậc hai",
             displayOrder: 1,
           },
+          microSkill: {
+            id: "micro_existing",
+            evidenceSkillId: "skill_existing",
+            title: "Kỹ năng đã có",
+            displayOrder: 1,
+          },
         },
       ],
     },
@@ -61,9 +67,62 @@ test("Ops reuses an existing subject and topic identity by teacher-facing labels
 });
 
 test("Ops refuses a duplicate MicroSkill title within the same teacher-facing Topic", async () => {
-  const existing = { id: "revision_existing", lifecycle: "PUBLISHED", body: { microSkills: [{ subject: { id: "subject_math", label: "Toán 10", displayOrder: 1 }, topic: { id: "topic_quadratic", subjectId: "subject_math", label: "Hàm số bậc hai", displayOrder: 1 }, microSkill: { id: "micro_sign", evidenceSkillId: "skill_sign", title: "Xét dấu tam thức", displayOrder: 1 } }] } };
-  const ops = new OpsService({ listRevisions: async () => [existing], createDraft: async () => { throw new Error("must not create"); } } as any);
-  await assert.rejects(() => ops.createInitialDraft({ subjectLabel: "Toán 10", topicLabel: "Hàm số bậc hai", microSkillTitle: "Xét dấu tam thức" }), { code: "DUPLICATE_MICROSKILL_TITLE" });
+  const existing = {
+    id: "revision_existing",
+    lifecycle: "PUBLISHED",
+    body: {
+      microSkills: [
+        {
+          subject: { id: "subject_math", label: "Toán 10", displayOrder: 1 },
+          topic: {
+            id: "topic_quadratic",
+            subjectId: "subject_math",
+            label: "Hàm số bậc hai",
+            displayOrder: 1,
+          },
+          microSkill: {
+            id: "micro_sign",
+            evidenceSkillId: "skill_sign",
+            title: "Xét dấu tam thức",
+            displayOrder: 1,
+          },
+        },
+      ],
+    },
+  };
+  const ops = new OpsService({
+    listRevisions: async () => [existing],
+    createDraft: async () => {
+      throw new Error("must not create");
+    },
+  } as any);
+  await assert.rejects(
+    () =>
+      ops.createInitialDraft({
+        subjectLabel: "Toán 10",
+        topicLabel: "Hàm số bậc hai",
+        microSkillTitle: "Xét dấu tam thức",
+      }),
+    { code: "DUPLICATE_MICROSKILL_TITLE" },
+  );
+});
+
+test("Ops ignores historical structural revisions that do not contain authoring hierarchy", async () => {
+  const legacy = {
+    id: "revision_legacy",
+    lifecycle: "DEPRECATED",
+    body: { microSkills: [{}] },
+  };
+  const ops = new OpsService({
+    listRevisions: async () => [legacy],
+    createDraft: async (revision: any) => revision,
+  } as any);
+  const draft = await ops.createInitialDraft({
+    subjectLabel: "Toán 10",
+    topicLabel: "Hàm số bậc hai",
+    microSkillTitle: "Xét dấu",
+  });
+  assert.equal(draft.body.microSkills[0]!.subject.label, "Toán 10");
 });
 
 test("Ops appends a paired Practice and Transfer draft with server-owned task identities", async () => {
@@ -113,18 +172,79 @@ test("Ops appends a paired Practice and Transfer draft with server-owned task id
 });
 
 test("Ops forks a locked revision into a new server-versioned draft", async () => {
-  const source = { id: "revision_v1", lifecycle: "PUBLISHED", body: { microSkills: [{ subject: { id: "subject_math", label: "Toán 10", displayOrder: 1 }, topic: { id: "topic_functions", subjectId: "subject_math", label: "Hàm số", displayOrder: 1 }, microSkill: { id: "micro_sign", evidenceSkillId: "skill_sign", topicId: "topic_functions", revisionId: "revision_v1", title: "Xét dấu", displayOrder: 1, prerequisiteMicroSkillIds: [] }, pairs: [{ microSkillRevisionId: "revision_v1" }] }] } };
-  const ops = new OpsService({ getRevision: async () => source, createDraft: async (revision: any) => revision } as any);
+  const source = {
+    id: "revision_v1",
+    lifecycle: "PUBLISHED",
+    body: {
+      microSkills: [
+        {
+          subject: { id: "subject_math", label: "Toán 10", displayOrder: 1 },
+          topic: {
+            id: "topic_functions",
+            subjectId: "subject_math",
+            label: "Hàm số",
+            displayOrder: 1,
+          },
+          microSkill: {
+            id: "micro_sign",
+            evidenceSkillId: "skill_sign",
+            topicId: "topic_functions",
+            revisionId: "revision_v1",
+            title: "Xét dấu",
+            displayOrder: 1,
+            prerequisiteMicroSkillIds: [],
+          },
+          pairs: [{ microSkillRevisionId: "revision_v1" }],
+        },
+      ],
+    },
+  };
+  const ops = new OpsService({
+    getRevision: async () => source,
+    createDraft: async (revision: any) => revision,
+  } as any);
   const fork = await ops.createNextDraft("revision_v1" as any);
   assert.equal(fork.lifecycle, "DRAFT");
   assert.notEqual(fork.id, source.id);
   assert.equal(fork.body.microSkills[0]!.microSkill.revisionId, fork.id);
-  assert.equal(fork.body.microSkills[0]!.pairs[0]!.microSkillRevisionId, fork.id);
-  assert.equal(source.body.microSkills[0]!.microSkill.revisionId, "revision_v1");
+  assert.equal(
+    fork.body.microSkills[0]!.pairs[0]!.microSkillRevisionId,
+    fork.id,
+  );
+  assert.equal(
+    source.body.microSkills[0]!.microSkill.revisionId,
+    "revision_v1",
+  );
 });
 
 test("Ops reports publication readiness from the server validator", async () => {
-  const revision = { id: "revision_readiness", lifecycle: "DRAFT", body: { microSkills: [{ subject: { id: "subject_math", label: "Toán", displayOrder: 1 }, topic: { id: "topic_algebra", subjectId: "subject_math", label: "Đại số", displayOrder: 1 }, microSkill: { id: "micro_readiness", evidenceSkillId: "skill_readiness", topicId: "topic_algebra", revisionId: "revision_readiness", title: "Kỹ năng", displayOrder: 1, prerequisiteMicroSkillIds: [] }, pairs: [] }] } };
+  const revision = {
+    id: "revision_readiness",
+    lifecycle: "DRAFT",
+    body: {
+      microSkills: [
+        {
+          subject: { id: "subject_math", label: "Toán", displayOrder: 1 },
+          topic: {
+            id: "topic_algebra",
+            subjectId: "subject_math",
+            label: "Đại số",
+            displayOrder: 1,
+          },
+          microSkill: {
+            id: "micro_readiness",
+            evidenceSkillId: "skill_readiness",
+            topicId: "topic_algebra",
+            revisionId: "revision_readiness",
+            title: "Kỹ năng",
+            displayOrder: 1,
+            prerequisiteMicroSkillIds: [],
+          },
+          pairs: [],
+        },
+      ],
+    },
+  };
   const ops = new OpsService({ getRevision: async () => revision } as any);
   const result = await ops.readiness("revision_readiness" as any);
   assert.equal(result.ready, false);

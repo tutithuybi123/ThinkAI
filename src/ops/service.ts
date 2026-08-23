@@ -44,9 +44,16 @@ export class OpsService {
         { code: "AUTHORING_LABEL_REQUIRED" },
       );
     const revisions = await this.list();
-    const nodes = revisions.flatMap(
-      (revision) => revision.body.microSkills ?? [],
-    );
+    const nodes = revisions
+      .flatMap((revision) => revision.body.microSkills ?? [])
+      .filter(
+        (node): node is MicroSkillAggregate =>
+          !!node &&
+          typeof node === "object" &&
+          !!node.subject &&
+          !!node.topic &&
+          !!node.microSkill,
+      );
     const existingSubject = nodes.find(
       (node) => normalized(node.subject.label) === subjectLabel,
     )?.subject;
@@ -226,9 +233,14 @@ export class OpsService {
   get(id: ContentRevisionId) {
     return this.content.getRevision<ContentAggregate>(id);
   }
-  async readiness(id: ContentRevisionId): Promise<{ readonly ready: boolean; readonly issues: readonly string[] }> {
+  async readiness(
+    id: ContentRevisionId,
+  ): Promise<{ readonly ready: boolean; readonly issues: readonly string[] }> {
     const revision = await this.get(id);
-    if (!revision) throw Object.assign(new Error("Revision is unavailable."), { code: "REVISION_UNAVAILABLE" });
+    if (!revision)
+      throw Object.assign(new Error("Revision is unavailable."), {
+        code: "REVISION_UNAVAILABLE",
+      });
     const issues = validatePublishableContent(revision.body);
     return { ready: issues.length === 0, issues };
   }
