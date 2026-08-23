@@ -6,7 +6,7 @@ import { validateContentAggregate } from "./v11-validator.js";
 import { createAggregatePairSnapshot, createPublishedPairSnapshot, runtimeContentFromSnapshot } from "./snapshot.js";
 import { validateContentBundle } from "./validator.js";
 import { packageAStructuralFixture } from "../fixtures/package-a-structural.js";
-import { assertPublishableContent, publishReviewedAggregate, validatePublishableContent } from "./publication.js";
+import { assertPublishableContent, assertRevisionBoundContent, publishReviewedAggregate, validatePublishableContent } from "./publication.js";
 import { approveRevision, createDraftRevision, submitForReview } from "./lifecycle.js";
 
 const assessment = { expectedResult: "2", gradingShape: { finalAnswerFacet: "required" as const, reasoningFacet: "required" as const, requiredCriterionIds: ["method"], optionalCriterionIds: [] }, criteria: [{ id: "method", description: "method" }], referenceSolutions: [{ format: "plain_text" as const, body: "alternate" }], commonMisconceptions: ["swap"], aiGuidance: { version: "g1", allowedSupportLevels: ["PROMPT"] as const } };
@@ -65,6 +65,14 @@ test("draft aggregates may be incomplete but publication requires a complete pai
 
 test("malformed aggregate data fails closed instead of throwing", () => {
   assert.doesNotThrow(() => assert.notEqual(validateContentAggregate({ microSkills: [{ microSkill: { prerequisiteMicroSkillIds: "bad" }, pairs: [] }] } as unknown).length, 0));
+});
+
+test("publication rejects a body whose executable micro-skill identity is not the revision identity", () => {
+  const revision = contentRevisionId("revision_bound_identity");
+  const node = base();
+  assert.throws(() => assertRevisionBoundContent(revision, { microSkills: [node] }), /REVISION_IDENTITY_MISMATCH/);
+  const bound = { ...node, microSkill: { ...node.microSkill, revisionId: revision }, pairs: node.pairs.map(item => ({ ...item, microSkillRevisionId: revision })) };
+  assert.doesNotThrow(() => assertRevisionBoundContent(revision, { microSkills: [bound] }));
 });
 
 test("a published aggregate pair carries its exact executable content without a bootstrap repository", () => {
