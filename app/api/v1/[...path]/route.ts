@@ -43,3 +43,4 @@ async function bind(request: Request): Promise<Response> {
 
 export const GET = bind;
 export const POST = bind;
+export const PUT = bind;
