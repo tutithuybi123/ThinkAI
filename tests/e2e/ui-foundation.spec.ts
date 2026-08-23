@@ -28,19 +28,49 @@ test("Ops renders the real revision hierarchy and keeps non-draft revisions read
   await page.route("**/api/v1/ops/revisions", route => route.fulfill({ json: revisions }));
   await page.goto("/ops");
   await page.getByRole("button", { name: /Toán 10/ }).first().click();
-  await expect(page.getByLabel("Subject")).toHaveValue("Toán 10");
-  await expect(page.getByLabel("Practice prompt")).toHaveValue("Tìm hệ số góc của đồ thị.");
-  await expect(page.getByText("TRANSFER · PAIR 1")).toBeVisible();
+  await expect(page.getByLabel("Môn học", { exact: true })).toHaveValue("Toán 10");
+  await expect(page.getByLabel("Đề bài").first()).toHaveValue("Tìm hệ số góc của đồ thị.");
+  await expect(page.getByText("Bài vận dụng 1", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: /Toán 10/ }).nth(1).click();
   await expect(page.getByText("Revision bất biến")).toBeVisible();
-  await expect(page.getByLabel("Subject")).toHaveCount(0);
+  await expect(page.getByLabel("Môn học", { exact: true })).toHaveCount(0);
 });
 
 test("Ops gives an authorized-session failure a safe retry state", async ({ page }) => {
   await page.route("**/api/v1/ops/revisions", route => route.fulfill({ status: 403, json: { error: { code: "FORBIDDEN", message: "Content operations require staff authorization." } } }));
   await page.goto("/ops");
-  await expect(page.getByRole("heading", { name: "Không có quyền hoặc không tải được nội dung" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Không thể mở Content Studio" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Thử lại" })).toBeVisible();
+});
+
+test("Ops creates a teacher-facing initial draft without exposing internal identities", async ({ page }) => {
+  const draft = { id: "revision_server_generated", lifecycle: "DRAFT", body: { microSkills: [{ subject: { id: "subject_math", label: "Toán 10", displayOrder: 1 }, topic: { id: "topic_quadratic", subjectId: "subject_math", label: "Hàm số bậc hai", displayOrder: 1 }, microSkill: { id: "micro_sign", evidenceSkillId: "skill_sign", revisionId: "revision_server_generated", title: "Xét dấu tam thức", displayOrder: 1, prerequisiteMicroSkillIds: [] }, pairs: [] }] } };
+  let creation: unknown;
+  await page.route("**/api/v1/ops/revisions", route => route.fulfill({ json: [] }));
+  await page.route("**/api/v1/ops/content", route => { creation = route.request().postDataJSON(); return route.fulfill({ status: 201, json: draft }); });
+  await page.goto("/ops");
+  await page.getByRole("button", { name: "+ Tạo nội dung mới" }).click();
+  await page.getByLabel("Tên môn học").fill("Toán 10");
+  await page.getByLabel("Tên chủ đề").fill("Hàm số bậc hai");
+  await page.getByLabel("Tên kỹ năng").fill("Xét dấu tam thức");
+  await page.getByRole("button", { name: "Tạo bản nháp" }).click();
+  await expect(page.getByText("Xét dấu tam thức").first()).toBeVisible();
+  expect(creation).toEqual({ subjectLabel: "Toán 10", topicLabel: "Hàm số bậc hai", microSkillTitle: "Xét dấu tam thức" });
+  await expect(page.getByLabel(/Evidence skill ID|MicroSkill revision ID/)).toHaveCount(0);
+});
+
+test("Ops adds a server-owned Practice to Transfer pair to a new draft", async ({ page }) => {
+  const base = { id: "revision_server_generated", lifecycle: "DRAFT", body: { microSkills: [{ subject: { id: "subject_math", label: "Toán 10", displayOrder: 1 }, topic: { id: "topic_quadratic", subjectId: "subject_math", label: "Hàm số bậc hai", displayOrder: 1 }, microSkill: { id: "micro_sign", evidenceSkillId: "skill_sign", revisionId: "revision_server_generated", title: "Xét dấu tam thức", displayOrder: 1, prerequisiteMicroSkillIds: [] }, pairs: [] }] } };
+  const paired = structuredClone(base); paired.body.microSkills[0].pairs.push({ id: "pair_server_generated", version: "1", microSkillRevisionId: "revision_server_generated", practiceContent: { id: "task_practice_server", role: "practice", prompt: { body: "" }, answerSpec: { kind: "exact_text" } }, transferContent: { id: "task_transfer_server", role: "transfer", prompt: { body: "" }, answerSpec: { kind: "exact_text" } }, connectionReveal: { title: "", explanation: { body: "" } } });
+  let pairRequest = 0;
+  await page.route("**/api/v1/ops/revisions", route => route.fulfill({ json: [base] }));
+  await page.route("**/api/v1/ops/revisions/revision_server_generated/readiness", route => route.fulfill({ json: { ready: false, issues: ["EMPTY_PUBLISHED_PAIR_BANK"] } }));
+  await page.route("**/api/v1/ops/revisions/revision_server_generated/pairs", route => { pairRequest += 1; return route.fulfill({ json: paired }); });
+  await page.goto("/ops"); await page.getByRole("button", { name: /Toán 10/ }).click();
+  await page.getByRole("button", { name: "+ Thêm cặp Bài luyện – Bài vận dụng" }).click();
+  await expect(page.getByText("Bài luyện 1 ↔ Bài vận dụng 1", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Đề bài").first()).toBeVisible();
+  expect(pairRequest).toBe(1);
 });
 
 test("Ops persists the displayed draft before submitting it for review", async ({ page }) => {
@@ -50,12 +80,11 @@ test("Ops persists the displayed draft before submitting it for review", async (
   await page.route("**/api/v1/ops/revisions/revision_gradient_draft", route => { savedMethod = route.request().method(); saved = route.request().postDataJSON(); return route.fulfill({ json: { id: "revision_gradient_draft", lifecycle: "DRAFT", body: saved!.contentAggregate } }); });
   await page.route("**/api/v1/ops/review", route => { reviewed = route.request().postDataJSON(); return route.fulfill({ json: { id: "revision_gradient_draft", lifecycle: "IN_REVIEW", body: saved!.contentAggregate } }); });
   await page.goto("/ops"); await page.getByRole("button", { name: /Toán 10/ }).click();
-  await page.getByLabel("MicroSkill", { exact: true }).fill("Bản nháp đang mở");
-  await page.getByLabel("MicroSkill revision ID").fill("revision_gradient_2");
-  await page.getByRole("button", { name: "Gửi review" }).click();
+  await page.getByLabel("Tên kỹ năng", { exact: true }).fill("Bản nháp đang mở");
+  await page.getByRole("button", { name: "Gửi duyệt" }).click();
   await expect.poll(() => reviewed?.revisionId).toBe("revision_gradient_draft");
   expect(savedMethod).toBe("PUT");
-  expect(saved?.contentAggregate?.microSkills[0]?.pairs?.[0]?.microSkillRevisionId).toBe("revision_gradient_2");
+  expect(saved?.contentAggregate?.microSkills[0]?.pairs?.[0]?.microSkillRevisionId).toBe("revision_gradient_1");
   expect(saved?.contentAggregate?.microSkills[0]?.microSkill?.title).toBe("Bản nháp đang mở");
 });
 
