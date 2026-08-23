@@ -499,6 +499,10 @@ test("Ops endpoints require staff and route revision edits through the shared se
       ),
       createDraft: async () => ({}),
       get: async () => ({}),
+      readiness: async (id: string) => (
+        calls.push(`readiness:${id}`),
+        { ready: false, issues: ["EMPTY_PUBLISHED_PAIR_BANK"] }
+      ),
       submitReview: async () => ({}),
       approve: async () => ({}),
       publish: async () => ({}),
@@ -532,7 +536,21 @@ test("Ops endpoints require staff and route revision edits through the shared se
     body: { contentAggregate: { microSkills: [] } },
   });
   assert.equal(edit.status, 200);
-  assert.deepEqual(calls, ["list", "edit:revision_ops_edit"]);
+  const readiness = await dispatch(services, {
+    method: "GET",
+    path: "/api/v1/ops/revisions/revision_ops_edit/readiness",
+    headers: { authorization: `Bearer ${staffToken}` },
+  });
+  assert.equal(readiness.status, 200);
+  assert.deepEqual(readiness.body, {
+    ready: false,
+    issues: ["EMPTY_PUBLISHED_PAIR_BANK"],
+  });
+  assert.deepEqual(calls, [
+    "list",
+    "edit:revision_ops_edit",
+    "readiness:revision_ops_edit",
+  ]);
 });
 
 test("Ops initial-content endpoint accepts labels but never accepts teacher supplied identities", async () => {

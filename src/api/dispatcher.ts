@@ -360,7 +360,11 @@ export async function dispatch(
         );
       if (!services.ops)
         return failure("NOT_FOUND", 404, "Content operations are unavailable.");
-      if (request.method === "GET" && parts[3] === "revisions")
+      if (
+        request.method === "GET" &&
+        parts[3] === "revisions" &&
+        parts.length === 4
+      )
         return response(200, await services.ops.list());
       if (
         request.method === "POST" &&
