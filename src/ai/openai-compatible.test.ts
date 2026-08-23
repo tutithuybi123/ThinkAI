@@ -15,7 +15,7 @@ test("Companion provider request carries only bound learner-safe task guidance",
   const serialized = JSON.stringify(body);
   assert.match(serialized, /Xét dấu f\(x\)/);
   assert.match(serialized, /Đừng bỏ qua hệ số đầu/);
-  assert.match(serialized, /Server-permitted support levels/);
-  assert.doesNotMatch(serialized, /quote hidden answer material/i);
+  assert.match(serialized, /Allowed levels/);
+  assert.doesNotMatch(serialized, /transfer-task-prompt/i);
   assert.doesNotMatch(serialized, /hidden-reference-solution|hidden-expected-answer|transfer-task-prompt/i);
 });
