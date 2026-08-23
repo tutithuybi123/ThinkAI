@@ -23,3 +23,7 @@ test("reviewed assessment rejects duplicate, overlapping, and unknown criterion 
 test("malformed assessment values fail closed without throwing", () => {
   for (const value of [{}, { expectedResult: "x" }, { ...assessment, referenceSolutions: [{ format: "pdf", body: "x" }] }, { ...assessment, aiGuidance: { version: "v", allowedSupportLevels: ["NONE"] } }]) assert.doesNotThrow(() => assert.notEqual(validateReviewedAssessment(value).length, 0));
 });
+
+test("reviewed assessment requires at least one authored Companion support level", () => {
+  assert.notEqual(validateReviewedAssessment({ ...assessment, aiGuidance: { version: "guidance-v1", allowedSupportLevels: [] } }).length, 0);
+});

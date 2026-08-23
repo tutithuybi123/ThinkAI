@@ -88,3 +88,36 @@ test("an exact persisted runtime snapshot survives later bootstrap content chang
   const reloaded = createService(database, changedRepository);
   assert.equal((await reloaded.service.resume(session, learner)).pairVersion, "1");
 });
+
+test("Companion context remains bound to the authored guidance in the session snapshot", async () => {
+  const database = new MemoryPersistenceDatabase();
+  const guidanceA = {
+    expectedResult: "fixture", gradingShape: { finalAnswerFacet: "required" as const, reasoningFacet: "required" as const, requiredCriterionIds: [], optionalCriterionIds: [] }, criteria: [],
+    referenceSolutions: [{ format: "plain_text" as const, body: "reviewed" }], commonMisconceptions: ["A misconception"], aiGuidance: { version: "guidance-a", allowedSupportLevels: ["PROMPT", "CONCEPTUAL_HINT"] as const },
+  };
+  const revisionA = { ...packageAStructuralFixture, tasks: packageAStructuralFixture.tasks.map((task, index) => index === 0 ? { ...task, answerSpec: { kind: "written_solution" as const, normalizationVersion: "written-v1", assessment: guidanceA } } : task) };
+  const first = createService(database, ReviewedContentRepository.fromRaw(revisionA, { allowStructuralTestFixture: true }));
+  await first.service.start({ sessionId: session, actorId: learner, pairId: pair, idempotencyKey: "start" });
+  const before = await first.service.companionContext(session, learner);
+  assert.equal(before.guidanceVersion, "guidance-a");
+  assert.deepEqual(before.taskContext.commonMisconceptions, ["A misconception"]);
+
+  const guidanceB = { ...guidanceA, commonMisconceptions: ["B misconception"], aiGuidance: { version: "guidance-b", allowedSupportLevels: ["PROMPT"] as const } };
+  const revisionB = { ...packageAStructuralFixture, tasks: packageAStructuralFixture.tasks.map((task, index) => index === 0 ? { ...task, answerSpec: { kind: "written_solution" as const, normalizationVersion: "written-v1", assessment: guidanceB } } : task) };
+  const restarted = createService(database, ReviewedContentRepository.fromRaw(revisionB, { allowStructuralTestFixture: true }));
+  const after = await restarted.service.companionContext(session, learner);
+  assert.equal(after.guidanceVersion, "guidance-a");
+  assert.deepEqual(after.taskContext.commonMisconceptions, ["A misconception"]);
+});
+
+test("learner Practice view exposes the bound prompt and capability but not grading internals", async () => {
+  const { service } = createService();
+  await service.start({ sessionId: session, actorId: learner, pairId: pair, idempotencyKey: "start" });
+  const view = await service.learnerView(session, learner);
+  assert.equal(view.task.prompt.body, "Structural practice prompt");
+  assert.equal(view.task.input, "text");
+  assert.equal(view.state.stage, "ready");
+  assert.equal(JSON.stringify(view).includes("accepted"), false);
+  assert.equal(JSON.stringify(view).includes("pairId"), false);
+  assert.equal(JSON.stringify(view).includes("taskVersion"), false);
+});

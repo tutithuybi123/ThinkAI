@@ -44,6 +44,8 @@ export interface RuntimeConfiguration {
   readonly staffBootstrapSecret?: string;
   readonly cleanDemoActorId: ActorId;
   readonly historyDemoActorId: ActorId;
+  /** Test composition seam; production resolves the live provider from environment. */
+  readonly companion?: { respond(input: { learnerMessage: string; guidanceVersion: string; messageId: string; taskContext: import("../assistance/companion.js").PracticeCompanionTaskContext }): Promise<{ delivery?: string; record: unknown; provider: string; model: string }> };
 }
 
 export interface ProductionRuntime {
@@ -54,7 +56,7 @@ export interface ProductionRuntime {
   readonly demo: PostgresDemoService;
   readonly contentRevisions: PostgresContentRevisionRepository;
   readonly ops: OpsService;
-  readonly companion?: LivePracticeCompanion;
+  readonly companion?: { respond(input: { learnerMessage: string; guidanceVersion: string; messageId: string; taskContext: import("../assistance/companion.js").PracticeCompanionTaskContext }): Promise<{ delivery?: string; record: unknown; provider: string; model: string }> };
   practiceCompanion(actor:ActorId,sessionId:ChallengeSessionId,input:{message:string;idempotencyKey:string;actorSessionId:string}):Promise<{delivery?:string}>;
   practiceLearnerView(actor:ActorId,sessionId:ChallengeSessionId):Promise<unknown>;
   advancePractice(actor:ActorId,sessionId:ChallengeSessionId,idempotencyKey:string):Promise<unknown>;
@@ -94,7 +96,7 @@ export async function createProductionRuntime(config: RuntimeConfiguration): Pro
   const persistence = new PostgresTransactionalEvidencePersistence(client);
   const contentRevisions = new PostgresContentRevisionRepository(client);
   const ops = new OpsService(contentRevisions);
-  const companion = process.env.NODE_ENV === "production" ? new LivePracticeCompanion() : undefined;
+  const companion = config.companion ?? (process.env.NODE_ENV === "production" ? new LivePracticeCompanion() : undefined);
   const processFeedback = process.env.NODE_ENV === "production" ? new LivePracticeProcessFeedback() : undefined;
   const rubricEvaluator = process.env.NODE_ENV === "production" ? new LiveRubricEvaluator() : undefined;
   const scoring = new DeterministicScoringService();
@@ -134,9 +136,10 @@ export async function createProductionRuntime(config: RuntimeConfiguration): Pro
     async practiceCompanion(actor:ActorId,sessionId:ChallengeSessionId,input:{message:string;idempotencyKey:string;actorSessionId:string}){
       if(!companion) throw Object.assign(new Error("Practice Companion is unavailable."),{code:"AI_UNAVAILABLE"});
       const challenge=await practice.resume(sessionId,actor);
-      const delivered=await companion.respond({learnerMessage:input.message,guidanceVersion:"runtime-v1",messageId:input.idempotencyKey});
+      const companionContext=await practice.companionContext(sessionId,actor);
+      const delivered=await companion.respond({learnerMessage:input.message,guidanceVersion:companionContext.guidanceVersion,messageId:input.idempotencyKey,taskContext:companionContext.taskContext});
       const eventId=evidenceEventId(`event_${createHash("sha256").update(`${sessionId}|${input.idempotencyKey}|assistance`).digest("hex").slice(0,32)}`);
-      await persistence.appendCommand({events:[assistanceEvidence({id:eventId,actorId:actor,challengeSessionId:sessionId,skillId:challenge.skillId,taskId:challenge.taskId,taskVersion:challenge.taskVersion,taskFamilyId:challenge.taskFamilyId,record:delivered.record as AssistanceRecord,guidanceVersion:"runtime-v1",occurredAt:(delivered.record as AssistanceRecord).occurredAt,provider:delivered.provider,model:delivered.model})],idempotencyKey:`companion:${sessionId}:${input.idempotencyKey}`,actorSessionId:input.actorSessionId});
+      await persistence.appendCommand({events:[assistanceEvidence({id:eventId,actorId:actor,challengeSessionId:sessionId,skillId:challenge.skillId,taskId:challenge.taskId,taskVersion:challenge.taskVersion,taskFamilyId:challenge.taskFamilyId,record:delivered.record as AssistanceRecord,guidanceVersion:companionContext.guidanceVersion,occurredAt:(delivered.record as AssistanceRecord).occurredAt,provider:delivered.provider,model:delivered.model})],idempotencyKey:`companion:${sessionId}:${input.idempotencyKey}`,actorSessionId:input.actorSessionId});
       return delivered.delivery?{delivery:delivered.delivery}:{};
     },
     async practiceLearnerView(actor:ActorId,sessionId:ChallengeSessionId){

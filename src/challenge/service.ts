@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import type { InterventionContent, ReviewedTaskPair, TaskContent } from "../content/schema.js";
 import type { ReviewedContentRepository } from "../content/repository.js";
 import { runtimeContentFromSnapshot, type ReviewedPairSnapshot } from "../content/snapshot.js";
+import type { PracticeCompanionTaskContext } from "../assistance/companion.js";
 import {
   type ActorId,
   type ChallengeSessionId,
@@ -76,6 +77,7 @@ export class PracticeChallengeError extends Error {
       | "INVALID_TRANSITION"
       | "INTERVENTION_NOT_AVAILABLE"
       | "CONTENT_VERSION_DRIFT"
+      | "AI_UNAVAILABLE"
       | "IDEMPOTENCY_CONFLICT",
     message: string,
   ) {
@@ -401,6 +403,25 @@ export class PracticeChallengeService {
   public async resume(sessionId: ChallengeSessionId, actorId: ActorId): Promise<PracticeChallengeView> {
     const loaded = await this.load(sessionId, actorId);
     return this.view(sessionId, loaded.state);
+  }
+
+  /** Resolves only the immutable Practice task snapshot bound to this session. */
+  public async companionContext(sessionId: ChallengeSessionId, actorId: ActorId): Promise<{ readonly guidanceVersion: string; readonly taskContext: PracticeCompanionTaskContext }> {
+    const loaded = await this.load(sessionId, actorId);
+    if (loaded.task.answerSpec.kind !== "written_solution") throw new PracticeChallengeError("AI_UNAVAILABLE", "Task-authored Practice guidance is unavailable.");
+    const assessment = loaded.task.answerSpec.assessment;
+    const guidance = assessment.aiGuidance as unknown as { version?: unknown; allowedSupportLevels?: unknown };
+    const misconceptions = assessment.commonMisconceptions as unknown;
+    const allowed = guidance.allowedSupportLevels;
+    if (typeof guidance.version !== "string" || !guidance.version.trim() || !Array.isArray(misconceptions) || !misconceptions.every((item) => typeof item === "string") || !Array.isArray(allowed) || allowed.length === 0 || new Set(allowed).size !== allowed.length || !allowed.every((item) => ["PROMPT", "CONCEPTUAL_HINT", "STRATEGIC_HINT", "STRONG_SCAFFOLD"].includes(String(item)))) throw new PracticeChallengeError("AI_UNAVAILABLE", "Task-authored Practice guidance is unavailable.");
+    return Object.freeze({
+      guidanceVersion: assessment.aiGuidance.version,
+      taskContext: Object.freeze({
+        practiceTaskId: String(loaded.task.id), practiceTaskVersion: loaded.task.version,
+        prompt: loaded.task.prompt.body, commonMisconceptions: Object.freeze([...misconceptions]),
+        allowedSupportLevels: Object.freeze([...allowed] as PracticeCompanionTaskContext["allowedSupportLevels"]),
+      }),
+    });
   }
 
   public async learnerView(sessionId: ChallengeSessionId, actorId: ActorId): Promise<PracticeLearnerView> {
