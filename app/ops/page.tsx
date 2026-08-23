@@ -534,6 +534,15 @@ function CreationForm({
         .filter(Boolean),
     ),
   ] as string[];
+  const topics = [
+    ...new Set(
+      existing
+        .flatMap((revision) => revision.body.microSkills ?? [])
+        .filter((node) => node.subject?.label === form.subjectLabel)
+        .map((node) => node.topic?.label)
+        .filter(Boolean),
+    ),
+  ] as string[];
   return (
     <>
       <div className="ops-editor-heading">
@@ -554,6 +563,30 @@ function CreationForm({
       ) : null}
       <section className="ops-section">
         <div className="section-label">1 · MÔN HỌC</div>
+        {subjects.length ? (
+          <label className="field">
+            <span>Dùng môn học đã có</span>
+            <select
+              aria-label="Dùng môn học đã có"
+              value=""
+              onChange={(event) => {
+                if (event.target.value)
+                  onChange({
+                    ...form,
+                    subjectLabel: event.target.value,
+                    topicLabel: "",
+                  });
+              }}
+            >
+              <option value="">Tạo môn học mới</option>
+              {subjects.map((subject) => (
+                <option key={subject} value={subject}>
+                  {subject}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
         <TextField
           id="ops-create-subject"
           label="Tên môn học"
@@ -568,6 +601,26 @@ function CreationForm({
       </section>
       <section className="ops-section">
         <div className="section-label">2 · CHỦ ĐỀ</div>
+        {topics.length ? (
+          <label className="field">
+            <span>Dùng chủ đề đã có</span>
+            <select
+              aria-label="Dùng chủ đề đã có"
+              value=""
+              onChange={(event) => {
+                if (event.target.value)
+                  onChange({ ...form, topicLabel: event.target.value });
+              }}
+            >
+              <option value="">Tạo chủ đề mới</option>
+              {topics.map((topic) => (
+                <option key={topic} value={topic}>
+                  {topic}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
         <TextField
           id="ops-create-topic"
           label="Tên chủ đề"
