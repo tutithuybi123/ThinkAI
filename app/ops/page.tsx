@@ -36,7 +36,7 @@ export default function OpsPage() {
     if (!previous?.microSkills?.[nodeIndex]) return previous;
     const body = clone(previous); body.microSkills![nodeIndex] = change(body.microSkills![nodeIndex]!); return body;
   });
-  const setLabel = (path: "subject" | "topic" | "microSkill", key: "label" | "title" | "evidenceSkillId" | "revisionId", value: string) => updateNode(current => ({ ...current, [path]: { ...current[path], [key]: value } }));
+  const setLabel = (path: "subject" | "topic" | "microSkill", key: "label" | "title" | "evidenceSkillId" | "revisionId", value: string) => updateNode(current => ({ ...current, [path]: { ...current[path], [key]: value }, ...(path === "microSkill" && key === "revisionId" ? { pairs: (current.pairs ?? []).map(pair => ({ ...pair, microSkillRevisionId: value })) } : {}) }));
   const updateGate = (key: "requiredCorrectCount" | "maxPracticeItems", value: number) => updateNode(current => ({ ...current, practiceGate: { policyVersion: "practice-gate/v1", strategy: "distinct-correct-count", ...current.practiceGate, [key]: value } }));
   const updatePair = (index: number, change: (pair: Pair) => Pair) => updateNode(current => ({ ...current, pairs: (current.pairs ?? []).map((pair, pairIndex) => pairIndex === index ? change(pair) : pair) }));
   const reorderPair = (index: number, direction: -1 | 1) => updateNode(current => { const pairs = [...(current.pairs ?? [])]; const target = index + direction; if (target < 0 || target >= pairs.length) return current; [pairs[index], pairs[target]] = [pairs[target]!, pairs[index]!]; return { ...current, pairs }; });

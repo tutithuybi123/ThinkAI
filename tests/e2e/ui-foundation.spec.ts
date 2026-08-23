@@ -44,16 +44,18 @@ test("Ops gives an authorized-session failure a safe retry state", async ({ page
 });
 
 test("Ops persists the displayed draft before submitting it for review", async ({ page }) => {
-  const body = { microSkills: [{ subject: { label: "Toán 10" }, topic: { label: "Hàm số" }, microSkill: { title: "Bản nháp cũ", evidenceSkillId: "skill_gradient", revisionId: "revision_gradient_1" }, practiceGate: { requiredCorrectCount: 1, maxPracticeItems: 1 }, pairs: [] }] };
+  const body = { microSkills: [{ subject: { label: "Toán 10" }, topic: { label: "Hàm số" }, microSkill: { title: "Bản nháp cũ", evidenceSkillId: "skill_gradient", revisionId: "revision_gradient_1" }, practiceGate: { requiredCorrectCount: 1, maxPracticeItems: 1 }, pairs: [{ id: "pair_1", version: "1", microSkillRevisionId: "revision_gradient_1", practiceContent: { id: "practice_1", prompt: { body: "practice" } }, transferContent: { id: "transfer_1", prompt: { body: "transfer" } } }] }] };
   let saved: { contentAggregate?: typeof body } | undefined; let savedMethod: string | undefined; let reviewed: { revisionId?: string } | undefined;
   await page.route("**/api/v1/ops/revisions", route => route.fulfill({ json: [{ id: "revision_gradient_draft", lifecycle: "DRAFT", body }] }));
   await page.route("**/api/v1/ops/revisions/revision_gradient_draft", route => { savedMethod = route.request().method(); saved = route.request().postDataJSON(); return route.fulfill({ json: { id: "revision_gradient_draft", lifecycle: "DRAFT", body: saved!.contentAggregate } }); });
   await page.route("**/api/v1/ops/review", route => { reviewed = route.request().postDataJSON(); return route.fulfill({ json: { id: "revision_gradient_draft", lifecycle: "IN_REVIEW", body: saved!.contentAggregate } }); });
   await page.goto("/ops"); await page.getByRole("button", { name: /Toán 10/ }).click();
   await page.getByLabel("MicroSkill", { exact: true }).fill("Bản nháp đang mở");
+  await page.getByLabel("MicroSkill revision ID").fill("revision_gradient_2");
   await page.getByRole("button", { name: "Gửi review" }).click();
   await expect.poll(() => reviewed?.revisionId).toBe("revision_gradient_draft");
   expect(savedMethod).toBe("PUT");
+  expect(saved?.contentAggregate?.microSkills[0]?.pairs?.[0]?.microSkillRevisionId).toBe("revision_gradient_2");
   expect(saved?.contentAggregate?.microSkills[0]?.microSkill?.title).toBe("Bản nháp đang mở");
 });
 
