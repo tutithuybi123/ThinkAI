@@ -78,6 +78,20 @@ test("a published aggregate pair carries its exact executable content without a 
   assert.equal(runtime.practiceTask.skillId, aggregate.microSkill.evidenceSkillId);
 });
 
+test("published snapshots with reused pair versions retain distinct executable identities", () => {
+  const original = base();
+  const revised = {
+    ...base(),
+    microSkill: { ...base().microSkill, evidenceSkillId: skillId("skill_gradient_revised") },
+    pairs: base().pairs.map(item => ({
+      ...item,
+      practiceContent: { ...item.practiceContent, skillId: skillId("skill_gradient_revised") },
+      transferContent: { ...item.transferContent, skillId: skillId("skill_gradient_revised") },
+    })),
+  };
+  assert.notEqual(createPublishedPairSnapshot(original, original.pairs[0]!).integrityKey, createPublishedPairSnapshot(revised, revised.pairs[0]!).integrityKey);
+});
+
 test("requires reviewed learner-facing labels for the published hierarchy", () => {
   const node = base();
   assert.equal(validateContentAggregate({ microSkills: [node] }).length, 0);

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { InterventionContent, ReviewedTaskPair, ReviewRecord, TaskContent } from "./schema.js";
 import { taskFamilyId, type TaskPairId } from "../domain/ids.js";
 import type { MicroSkillAggregate } from "./v11-validator.js";
@@ -33,14 +34,13 @@ export function createReviewedPairSnapshot(
   transferTask: TaskContent,
   interventions: readonly InterventionContent[],
 ): ReviewedPairSnapshot {
-  const references = [pair, practiceTask, transferTask, ...interventions].map((item) => `${item.id}@${item.version}`);
   const written = practiceTask.answerSpec.kind === "written_solution" ? practiceTask.answerSpec : undefined;
   const snapshot = {
     pair: Object.freeze({ id: pair.id, version: pair.version }),
     practiceTask: Object.freeze({ id: practiceTask.id, version: practiceTask.version }),
     transferTask: Object.freeze({ id: transferTask.id, version: transferTask.version }),
     interventions: Object.freeze(interventions.map((item) => Object.freeze({ id: item.id, version: item.version }))),
-    integrityKey: [...references, ...(written ? [`assessment:${JSON.stringify(written.assessment)}`, `guidance:${written.assessment.aiGuidance.version}`] : [])].join("|"),
+    integrityKey: `${legacyIntegrityKey(pair, practiceTask, transferTask, interventions)}|content:${contentDigest(pair, practiceTask, transferTask, interventions)}`,
     ...(written ? { assessment: immutableCopy(written.assessment), aiGuidanceVersion: written.assessment.aiGuidance.version } : {}),
   };
   return Object.freeze({ ...snapshot, runtimeContent: freezeRuntimeContent(pair, practiceTask, transferTask, interventions) });
@@ -74,9 +74,31 @@ export function runtimeContentFromSnapshot(snapshot: ReviewedPairSnapshot): Read
   if (!snapshot.runtimeContent) throw new Error("Persisted snapshot has no executable reviewed content.");
   const value = snapshot.runtimeContent;
   const current = createReviewedPairSnapshot(value.pair, value.practiceTask, value.transferTask, value.interventions);
-  if (current.integrityKey !== snapshot.integrityKey) throw new Error(`Content snapshot integrity mismatch for ${snapshot.pair.id}.`);
+  if (current.integrityKey !== snapshot.integrityKey && (!isLegacyIntegrityKey(snapshot.integrityKey) || legacyIntegrityKey(value.pair, value.practiceTask, value.transferTask, value.interventions) !== snapshot.integrityKey)) throw new Error(`Content snapshot integrity mismatch for ${snapshot.pair.id}.`);
   return value;
 }
+
+/** Prior snapshots predate the executable-content digest. Keep their exact historical binding readable. */
+function legacyIntegrityKey(pair: ReviewedTaskPair, practiceTask: TaskContent, transferTask: TaskContent, interventions: readonly InterventionContent[]): string {
+  const references = [pair, practiceTask, transferTask, ...interventions].map((item) => `${item.id}@${item.version}`);
+  const written = practiceTask.answerSpec.kind === "written_solution" ? practiceTask.answerSpec : undefined;
+  return [...references, ...(written ? [`assessment:${JSON.stringify(written.assessment)}`, `guidance:${written.assessment.aiGuidance.version}`] : [])].join("|");
+}
+
+function contentDigest(pair: ReviewedTaskPair, practiceTask: TaskContent, transferTask: TaskContent, interventions: readonly InterventionContent[]): string {
+  return createHash("sha256").update(canonicalJson({ pair, practiceTask, transferTask, interventions }), "utf8").digest("hex");
+}
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record).sort().map(key => `${JSON.stringify(key)}:${canonicalJson(record[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function isLegacyIntegrityKey(key: string): boolean { return !key.includes("|content:"); }
 
 function publishedReview(): ReviewRecord {
   return Object.freeze({ status: "approved", reviewerId: "postgres-published", reviewedAt: "1970-01-01T00:00:00.000Z", validationVersion: "content-revision/v1", sourceProvenance: "postgres-published-revision" });
