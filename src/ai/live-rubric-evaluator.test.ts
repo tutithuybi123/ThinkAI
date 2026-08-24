@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { LiveRubricEvaluator } from "./live-rubric-evaluator.js";
 
-test("live evaluator sends exact reviewed criteria and expected result to the provider", async () => {
+test("live evaluator sends only the learner solution and concise reviewed facets to the provider", async () => {
   const originalFetch = globalThis.fetch;
   const originalEnvironment = { ...process.env };
   let request: { messages?: Array<{ role?: string; content?: string }> } | undefined;
@@ -17,9 +17,10 @@ test("live evaluator sends exact reviewed criteria and expected result to the pr
     };
     await new LiveRubricEvaluator().evaluate({ taskVersion: "1", rubricVersion: "guidance/v1", rawText: "Lập luận hợp lệ.", expectedResult: "f(3) < 0", criteria: [{ id: "criterion_a", description: "Nêu quan hệ dấu đúng." }], shape: { finalAnswerFacet: "not_applicable", reasoningFacet: "required", requiredCriterionIds: ["criterion_a"], optionalCriterionIds: [] } } as never);
     const user = request?.messages?.find((message) => message.role === "user")?.content ?? "";
-    assert.match(user, /f\(3\) < 0/);
+    assert.match(user, /Bài làm: Lập luận hợp lệ\./);
     assert.match(user, /criterion_a/);
     assert.match(user, /Nêu quan hệ dấu đúng/);
+    assert.doesNotMatch(user, /expectedResult|gradingShape|taskVersion|rubricVersion/);
   } finally {
     globalThis.fetch = originalFetch;
     process.env = originalEnvironment;

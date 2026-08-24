@@ -6,7 +6,13 @@ export class LiveRubricEvaluator implements RubricEvaluatorAdapter {
   private readonly config=providerConfigFromEnvironment();
   private readonly provider=new OpenAICompatibleProvider(this.config);
   async evaluate(input:{taskVersion:string;rubricVersion:string;rawText:string;expectedResult:string;criteria:readonly {readonly id:string;readonly description:string}[];shape:import("../content/rubric.js").ReviewedRubricGradingShape}):Promise<unknown>{
-    const reply=await this.provider.complete({system:"Return only a JSON object with finalAnswer, reasoning, criteria, errors, confidence and evaluatorVersion. Return rubric facets only; never return a grade or outcome.",user:JSON.stringify({taskVersion:input.taskVersion,rubricVersion:input.rubricVersion,expectedResult:input.expectedResult,criteria:input.criteria,gradingShape:input.shape,solution:input.rawText})});
+    const finalAnswer=input.shape.finalAnswerFacet==="required"?`"finalAnswer":"correct|incorrect|unknown",`:"";
+    const criteria=input.criteria.map((criterion)=>`${criterion.id}: ${criterion.description}`).join("\n");
+    const schema=`{${finalAnswer}"reasoning":"correct|incorrect|partial|uncertain","criteria":[${input.criteria.map((criterion)=>`{"id":"${criterion.id}","status":"correct|incorrect|partial|uncertain"}`).join(",")}],"errors":[],"confidence":"high|medium|low","evaluatorVersion":"qwen"}`;
+    const reply=await this.provider.complete({
+      system:"Bạn đánh giá bài giải toán. Chỉ trả JSON thuần; không markdown, không outcome.",
+      user:`Bài làm: ${input.rawText}\nTiêu chí:\n${criteria}\nTrả đúng JSON: ${schema}`
+    });
     return JSON.parse(reply.text) as unknown;
   }
 }
