@@ -447,7 +447,7 @@ export class PracticeChallengeService {
     const assessment=task.answerSpec.assessment;
     if(!this.rubricEvaluator)return "UNCERTAIN";
     const rawText=typeof answer==="string"?answer:answer.kind==="text"?answer.value:"";
-    const evidence=await evaluateReviewedRubric(this.rubricEvaluator,{taskVersion:task.version,rubricVersion:assessment.aiGuidance.version,rawText,shape:assessment.gradingShape,criterionIds:assessment.criteria.map(x=>x.id),provenance:{adapterId:"runtime",modelVersion:"configured",schemaVersion:"rubric-facets/v1"}});
+    const evidence=await evaluateReviewedRubric(this.rubricEvaluator,{taskVersion:task.version,rubricVersion:assessment.aiGuidance.version,rawText,expectedResult:assessment.expectedResult,criteria:assessment.criteria,shape:assessment.gradingShape,criterionIds:assessment.criteria.map(x=>x.id),provenance:{adapterId:"runtime",modelVersion:"configured",schemaVersion:"rubric-facets/v1"}});
     return deriveGradingOutcome({deterministic:evaluateDeterministic(task,answer,this.scoring),rubric:evidence.status==="valid"?evidence.facets:undefined,shape:assessment.gradingShape,criterionIds:assessment.criteria.map(x=>x.id),contentVersion:task.version,taskVersion:task.version,rubricVersion:assessment.aiGuidance.version}).outcome;
   }
 
