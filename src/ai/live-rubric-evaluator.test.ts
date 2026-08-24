@@ -13,14 +13,17 @@ test("live evaluator sends only the learner solution and concise reviewed facets
     process.env.THINKAI_AI_MODEL = "fixed-model";
     globalThis.fetch = async (_url, init) => {
       request = JSON.parse(String(init?.body));
-      return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ finalAnswer: "correct", reasoning: "correct", criteria: [{ id: "criterion_a", status: "correct" }], errors: [], confidence: "high", evaluatorVersion: "fixed-model" }) } }] }));
+      return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ reasoning: "correct", facets: [{ criterionId: "criterion_a", status: "correct" }], confidence: "high" }) } }] }));
     };
-    await new LiveRubricEvaluator().evaluate({ taskVersion: "1", rubricVersion: "guidance/v1", rawText: "Lập luận hợp lệ.", expectedResult: "f(3) < 0", criteria: [{ id: "criterion_a", description: "Nêu quan hệ dấu đúng." }], shape: { finalAnswerFacet: "not_applicable", reasoningFacet: "required", requiredCriterionIds: ["criterion_a"], optionalCriterionIds: [] } } as never);
+    const result = await new LiveRubricEvaluator().evaluate({ taskVersion: "1", rubricVersion: "guidance/v1", rawText: "Lập luận hợp lệ.", expectedResult: "f(3) < 0", criteria: [{ id: "criterion_a", description: "Nêu quan hệ dấu đúng." }], shape: { finalAnswerFacet: "not_applicable", reasoningFacet: "required", requiredCriterionIds: ["criterion_a"], optionalCriterionIds: [] } } as never) as { criteria?: unknown; evaluatorVersion?: unknown };
     const user = request?.messages?.find((message) => message.role === "user")?.content ?? "";
     assert.match(user, /Bài làm: Lập luận hợp lệ\./);
     assert.match(user, /criterion_a/);
     assert.match(user, /Nêu quan hệ dấu đúng/);
     assert.doesNotMatch(user, /expectedResult|gradingShape|taskVersion|rubricVersion/);
+    assert.match(user, /facets/);
+    assert.deepEqual(result.criteria, [{ id: "criterion_a", status: "correct" }]);
+    assert.equal(result.evaluatorVersion, "fixed-model");
   } finally {
     globalThis.fetch = originalFetch;
     process.env = originalEnvironment;

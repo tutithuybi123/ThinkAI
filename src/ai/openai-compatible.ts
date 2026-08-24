@@ -5,7 +5,7 @@ export class OpenAICompatibleProvider {
   async complete(input:{system:string;user:string}):Promise<{provider:"tokenrouter"|"openrouter";model:string;text:string}>{
     for(let attempt=0;attempt<2;attempt+=1){
       const controller=new AbortController();
-      const timeout=setTimeout(()=>controller.abort(),20_000);
+      const timeout=setTimeout(()=>controller.abort(),30_000);
       try {
         const response=await this.fetcher(`${this.config.baseUrl.replace(/\/$/,"")}/chat/completions`,{method:"POST",signal:controller.signal,headers:{Authorization:`Bearer ${this.config.apiKey}`,"content-type":"application/json"},body:JSON.stringify({model:this.config.model,temperature:0,messages:[{role:"system",content:input.system},{role:"user",content:input.user}]})});
         if(!response.ok){
