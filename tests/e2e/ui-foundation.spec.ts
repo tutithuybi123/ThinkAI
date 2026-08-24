@@ -79,6 +79,29 @@ test("foundation routes preserve the intended learner and operations shells", as
   ).toBeVisible();
 });
 
+test("written Practice submits the learner's reasoning as the authoritative answer", async ({ page }) => {
+  let submitted: unknown;
+  const view = {
+    sessionId: "written",
+    context: { label: "Bài luyện" },
+    task: { prompt: { format: "plain_text", body: "Giải thích dấu của tam thức." }, assets: [], input: "written_solution", requiresWrittenSolution: true },
+    progress: { ordinal: 1, label: "Bài luyện hiện tại" },
+    state: { stage: "ready", attemptCount: 0, submissionCount: 0 },
+    assistance: { available: true },
+    nextAction: "submit",
+  };
+  await page.route("**/api/v1/challenges/written", (route) => route.fulfill({ json: view }));
+  await page.route("**/api/v1/challenges/written/attempts", (route) => route.fulfill({ json: {} }));
+  await page.route("**/api/v1/challenges/written/submissions", async (route) => {
+    submitted = route.request().postDataJSON();
+    await route.fulfill({ json: {} });
+  });
+  await page.goto("/practice/written");
+  await page.getByLabel("Cách bạn lập luận").fill("Vì điểm nằm giữa hai nghiệm nên hai thừa số trái dấu.");
+  await page.getByRole("button", { name: "Gửi bài làm" }).click();
+  await expect.poll(() => submitted).toEqual({ answer: "Vì điểm nằm giữa hai nghiệm nên hai thừa số trái dấu." });
+});
+
 test("Ops renders the real revision hierarchy and keeps non-draft revisions read-only", async ({
   page,
 }) => {
