@@ -17,7 +17,11 @@ export function idempotencyKey(): string {
 
 export async function requestJson<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
   try {
-    const response = await fetch(path, { method: options.method ?? "GET", credentials: "include", headers: { ...(options.body === undefined ? {} : { "content-type": "application/json" }), ...(options.idempotencyKey ? { "Idempotency-Key": options.idempotencyKey } : {}) }, ...(options.signal === undefined ? {} : { signal: options.signal }), ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }) });
+    let response = await send(path, options);
+    if (response.status === 401 && path !== "/api/v1/demo/session") {
+      const bootstrap = await send("/api/v1/demo/session", { method: "POST", body: { profile: "clean" } });
+      if (bootstrap.ok) response = await send(path, options);
+    }
     const body: unknown = await response.json().catch(() => undefined);
     if (!response.ok) throw new FrontendApiError(normalizeApiError(body));
     return body as T;
@@ -25,4 +29,8 @@ export async function requestJson<T>(path: string, options: ApiRequestOptions = 
     if (error instanceof FrontendApiError) throw error;
     throw new FrontendApiError(normalizeApiError(error));
   }
+}
+
+function send(path: string, options: ApiRequestOptions): Promise<Response> {
+  return fetch(path, { method: options.method ?? "GET", credentials: "include", headers: { ...(options.body === undefined ? {} : { "content-type": "application/json" }), ...(options.idempotencyKey ? { "Idempotency-Key": options.idempotencyKey } : {}) }, ...(options.signal === undefined ? {} : { signal: options.signal }), ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }) });
 }
