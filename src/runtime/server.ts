@@ -178,6 +178,10 @@ export async function createProductionRuntime(config: RuntimeConfiguration): Pro
     async issueReceiptForTransfer(actor:ActorId,id:string,idempotencyKey:string,actorSessionId:string){const transferId=transferSessionId(id);const binding=await this.transfer.serverBinding(transferId,actor);return this.receipts.issue({actorId:actor,practiceSessionId:binding.practiceSessionId,transferSessionId:transferId,idempotencyKey,actorSessionId});},
     sessionBootstrap: {
       async issueLearner(profile: "clean" | "history"): Promise<{ token: string; actorId: ActorId; role: "learner" }> {
+        if (process.env.THINKAI_PUBLIC_DEMO_MODE === "1" && profile === "clean") {
+          const issued = await auth.issuePublicDemoLearner(30 * 60 * 1000);
+          return { token: issued.token, actorId: issued.actorId, role: "learner" };
+        }
         const actor = profile === "clean" ? config.cleanDemoActorId : config.historyDemoActorId;
         return { token: await auth.issue(actor, 30 * 60 * 1000), actorId: actor, role: "learner" };
       },

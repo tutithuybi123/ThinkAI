@@ -51,6 +51,23 @@ integration("PostgreSQL-backed synthetic sessions survive a registry restart and
   } finally { await client.close(); }
 });
 
+integration("public demo learners receive isolated actor sessions", async () => {
+  const admin = NodePostgresClient.fromConnectionString(databaseUrl!);
+  await admin.query("DROP SCHEMA IF EXISTS thinkai_pg_public_demo_sessions CASCADE; CREATE SCHEMA thinkai_pg_public_demo_sessions");
+  await admin.close();
+  const client = NodePostgresClient.fromConnectionStringInSchema(databaseUrl!, "thinkai_pg_public_demo_sessions");
+  try {
+    await runMigrations(client);
+    const registry = new PostgresSyntheticSessionRegistry(new SignedSessionService("0123456789abcdef0123456789abcdef"), client, []);
+    await registry.initialize();
+    const first = await registry.issuePublicDemoLearner(60_000);
+    const second = await registry.issuePublicDemoLearner(60_000);
+    assert.notEqual(first.actorId, second.actorId);
+    assert.equal((await registry.verify(first.token)).actorId, first.actorId);
+    assert.equal((await registry.verify(second.token)).actorId, second.actorId);
+  } finally { await client.close(); }
+});
+
 integration("a reset/revoked PostgreSQL actor session fences a previously authenticated write", async () => {
   const admin = NodePostgresClient.fromConnectionString(databaseUrl!);
   await admin.query("DROP SCHEMA IF EXISTS thinkai_pg_auth_fence CASCADE; CREATE SCHEMA thinkai_pg_auth_fence");

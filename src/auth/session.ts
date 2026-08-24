@@ -125,10 +125,22 @@ export class PostgresSyntheticSessionRegistry implements SessionAuthenticator {
     });
   }
 
+  /** Public demo browsers receive a distinct synthetic learner actor. */
+  public async issuePublicDemoLearner(ttlMs: number): Promise<{ readonly token: string; readonly actorId: ActorId }> {
+    const actorId = `actor_public_demo_${randomUUID().replaceAll("-", "")}` as ActorId;
+    return this.client.transaction(async (tx) => {
+      await tx.query("INSERT INTO synthetic_actor_sessions (actor_id,role) VALUES ($1,'learner')", [actorId]);
+      const sessionId = `synthetic_${randomUUID()}`;
+      await tx.query("UPDATE synthetic_actor_sessions SET current_session_id = $2, generation = generation + 1, updated_at = now() WHERE actor_id = $1", [actorId, sessionId]);
+      return { actorId, token: this.signer.issue({ actorId, role: "learner", sessionId, ttlMs }) };
+    });
+  }
+
   public async verify(token: string | undefined): Promise<AuthenticatedActor> {
     const actor = this.signer.verify(token);
     const account = this.accounts.get(actor.actorId);
-    if (!account || account.role !== actor.role) throw new SessionAuthError("UNAUTHORIZED", "The actor session is not recognized.");
+    const publicDemoLearner = actor.role === "learner" && actor.actorId.startsWith("actor_public_demo_");
+    if ((!account && !publicDemoLearner) || (account && account.role !== actor.role)) throw new SessionAuthError("UNAUTHORIZED", "The actor session is not recognized.");
     const row = await this.client.query<{ role: SessionRole; current_session_id: string | null }>("SELECT role,current_session_id FROM synthetic_actor_sessions WHERE actor_id = $1", [actor.actorId]);
     if (row.rows[0]?.role !== actor.role || row.rows[0]?.current_session_id !== actor.sessionId) throw new SessionAuthError("UNAUTHORIZED", "The actor session is no longer active.");
     return actor;
