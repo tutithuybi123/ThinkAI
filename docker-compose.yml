@@ -29,7 +29,7 @@ services:
     expose: ["5432"]
   cloudflared:
     image: cloudflare/cloudflared:latest
-    command: tunnel --no-autoupdate --url http://app:3000
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
     depends_on: [app]
     restart: unless-stopped
 volumes:

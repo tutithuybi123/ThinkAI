@@ -10,6 +10,7 @@ import {
   TextField,
   WrittenSolutionField,
 } from "../components/ui.js";
+import { RichText } from "../components/rich-text.js";
 import { idempotencyKey, requestJson } from "../lib/api-client.js";
 
 type AnswerKind = "exact_text" | "numeric" | "expression" | "written_solution";
@@ -1308,11 +1309,11 @@ function Preview({ node, lifecycle }: { node: Node; lifecycle: Lifecycle }) {
         <div className="ops-preview-pair" key={pair.id}>
           <div>
             <div className="section-label">BÀI LUYỆN {index + 1}</div>
-            <p>{pair.practiceContent?.prompt?.body ?? "Chưa có đề bài"}</p>
+            <RichText>{pair.practiceContent?.prompt?.body ?? "Chưa có đề bài"}</RichText>
           </div>
           <div>
             <div className="section-label">BÀI VẬN DỤNG {index + 1}</div>
-            <p>{pair.transferContent?.prompt?.body ?? "Chưa có đề bài"}</p>
+            <RichText>{pair.transferContent?.prompt?.body ?? "Chưa có đề bài"}</RichText>
           </div>
         </div>
       ))}

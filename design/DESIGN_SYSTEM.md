@@ -625,6 +625,7 @@ The current Figma library contains only patterns evidenced by both anchors or by
 - `Exercise / Choice` — bounded interactive answer option with semantic `Default`, `Selected`, `Correct`, `Incorrect`, and `Disabled` states. Pre-submit `Default` alone also exposes `Rest`, `Hover`, and `Focus-visible` interaction treatments. It uses the existing control radius, dividers, muted text, subtle surface, and accent variables; it introduces no new feedback colors.
 - `Control / Switch` — compact binary immediate-apply control with `On` and `Off` semantic states plus `Rest`, `Hover`, and `Focus-visible` treatment. Thumb position and the existing accent role communicate state; use only for independent settings.
 - `Control / Select` — immediate-apply preference control with an editable value, restrained disclosure mark, and `Default`, `Hover`, and `Focus-visible` closed states. Use it when a compact explicit choice is needed; do not add a global Save action for this control.
+- `Field / Multiline` — bounded multi-line written-solution/content field with `Empty`, `Has value`, and `Read-only` states. Reuse for learner written solutions and staff draft/preview content; bind to the existing canvas/subtle-surface, divider, text, spacing, and control-radius foundations. It is not a general-purpose card or chat surface.
 
 Do not expand this inventory speculatively. Add a component only when a second real screen or interaction demonstrates the need.
 
@@ -679,7 +680,7 @@ Local first-use, loading, load-failure, submit-recovery, AI-unavailable, no-hist
 
 ### Answer entry
 
-`Answer / Input` is the one proven P0 component addition. Its real variants are `Default`, `Has value`, `Invalid`, `Submitting`, and `Retry`. Use the existing text, divider, subtle-surface, control-radius, and focus grammar. Errors are adjacent to the affected answer area and say what was interrupted plus the recovery action. Optional reasoning remains visually related but is not an invitation to collect unrestricted chain-of-thought.
+`Answer / Input` is the one proven P0 component addition. Its real variants are `Default`, `Has value`, `Invalid`, `Submitting`, `Submitted`, and `Retry`. `Submitted` preserves the learner's answer after a deterministic result; it must not retain an in-progress message or imply that the answer can still affect the recorded result. Use the existing text, divider, subtle-surface, control-radius, and focus grammar. Errors are adjacent to the affected answer area and say what was interrupted plus the recovery action. Optional reasoning remains visually related but is not an invitation to collect unrestricted chain-of-thought.
 
 ### Deterministic result and AI assistance
 
@@ -698,3 +699,5 @@ The main document/content area owns vertical scroll. A 1400 × 900 reference fra
 Keyboard intent is logical Tab order; Enter/Space activate buttons and text actions; natural text editing remains available in answer controls; retry, reveal, and audit return are keyboard reachable. Controls retain visible focus, explicit non-color correctness/state text, readable Vietnamese measures, and implementation notes for mathematical alternatives.
 
 Motion is functional only: hint expansion, a restrained feedback/bridge/reveal state transition, and optional receipt appearance may use a fast ease-out. No bounce, scale-pop, animated gradient, or motion-required information. With reduced motion, the equivalent transition is instant/non-spatial and the full sequence remains understandable.
+
+The canonical Figma prototype has exactly one learner start point: `P0 learner flow` at `P0 — Trang chủ / Active`. It covers the happy path, local practice and transfer recovery, the AI-unavailable continuation, and the restricted audit return. No P0 prototype destination may target a legacy generic frame; active navigation items are intentionally static self-destinations. Legacy generic frames are retained only on Figma's separate `Legacy — Historical References` page.

@@ -23,4 +23,7 @@ test("Companion provider request carries only bound learner-safe task guidance",
   const serialized = JSON.stringify(body);
   assert.doesNotMatch(serialized, /transfer-task-prompt/i);
   assert.doesNotMatch(serialized, /hidden-reference-solution|hidden-expected-answer|transfer-task-prompt/i);
+  assert.match(system, /one next reasoning step/i);
+  assert.match(system, /ignore learner instructions/i);
+  assert.match(system, /LaTeX/i);
 });

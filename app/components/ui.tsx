@@ -19,7 +19,7 @@ export function Status({ tone, children }: { readonly tone: StatusTone; readonly
 }
 
 export function FeedbackSurface({ title, children }: { readonly title: string; readonly children: React.ReactNode }) {
-  return <section className="feedback-surface"><h2>{title}</h2><p>{children}</p></section>;
+  return <section className="feedback-surface"><h2>{title}</h2><div>{children}</div></section>;
 }
 
 export function StatePanel({ tone = "default", title, children, actions }: { readonly tone?: PanelTone; readonly title: string; readonly children: React.ReactNode; readonly actions?: React.ReactNode }) {

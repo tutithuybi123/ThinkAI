@@ -9,15 +9,61 @@
     "exactOptionalPropertyTypes": true,
     "verbatimModuleSyntax": true,
     "skipLibCheck": true,
-    "types": ["node"],
-    "lib": ["dom", "dom.iterable", "esnext"],
+    "types": [
+      "node"
+    ],
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
     "allowJs": true,
     "incremental": true,
     "esModuleInterop": true,
     "resolveJsonModule": true,
     "jsx": "react-jsx",
-    "plugins": [{ "name": "next" }]
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ]
   },
-  "include": ["src/**/*.ts", "app/**/*.ts", "app/**/*.tsx", ".next/types/**/*.ts", ".next/dev/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  "include": [
+    "src/**/*.ts",
+    "app/**/*.ts",
+    "app/**/*.tsx",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts",
+    ".next-runtime-acceptance-20988-49407/types/**/*.ts",
+    ".next-runtime-acceptance-20988-49407/dev/types/**/*.ts",
+    ".next-runtime-acceptance-6076-57244/types/**/*.ts",
+    ".next-runtime-acceptance-6076-57244/dev/types/**/*.ts",
+    ".next-runtime-acceptance-6012-57277/types/**/*.ts",
+    ".next-runtime-acceptance-6012-57277/dev/types/**/*.ts",
+    ".next-runtime-acceptance-19796-56773/types/**/*.ts",
+    ".next-runtime-acceptance-19796-56773/dev/types/**/*.ts",
+    ".next-runtime-acceptance-19796-56791/types/**/*.ts",
+    ".next-runtime-acceptance-19796-56791/dev/types/**/*.ts",
+    ".next-runtime-acceptance-20368-56866/types/**/*.ts",
+    ".next-runtime-acceptance-20368-56866/dev/types/**/*.ts",
+    ".next-runtime-acceptance-20368-56893/types/**/*.ts",
+    ".next-runtime-acceptance-20368-56893/dev/types/**/*.ts",
+    ".next-runtime-acceptance-20368-56913/types/**/*.ts",
+    ".next-runtime-acceptance-20368-56913/dev/types/**/*.ts",
+    ".next-runtime-acceptance-37792-58966/types/**/*.ts",
+    ".next-runtime-acceptance-37792-58966/dev/types/**/*.ts",
+    ".next-runtime-acceptance-37792-56743/types/**/*.ts",
+    ".next-runtime-acceptance-37792-56743/dev/types/**/*.ts",
+    ".next-runtime-acceptance-37792-57020/types/**/*.ts",
+    ".next-runtime-acceptance-37792-57020/dev/types/**/*.ts",
+    ".next-runtime-acceptance-36764-53252/types/**/*.ts",
+    ".next-runtime-acceptance-36764-53252/dev/types/**/*.ts",
+    ".next-runtime-acceptance-36764-53286/types/**/*.ts",
+    ".next-runtime-acceptance-36764-53286/dev/types/**/*.ts",
+    ".next-runtime-acceptance-36764-53305/types/**/*.ts",
+    ".next-runtime-acceptance-36764-53305/dev/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
 }

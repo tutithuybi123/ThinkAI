@@ -306,6 +306,10 @@ a { color: inherit; text-decoration: none; }
 .ops-preview h3 { margin: var(--space-1) 0 0; font-size: var(--font-size-section); }
 .ops-preview-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-6); border-bottom: var(--border-default); padding: var(--space-4) 0; }
 .ops-preview-pair p { margin: var(--space-2) 0 0; white-space: pre-wrap; }
+.rich-text > :first-child { margin-top: 0; }
+.rich-text > :last-child { margin-bottom: 0; }
+.rich-text .katex { white-space: nowrap; }
+.rich-text .katex-display { display: block; max-width: 100%; overflow-x: auto; overflow-y: hidden; padding: .15rem 0; margin: .5em 0; }
 
 @media (max-width: 84.9375rem) {
   .app-shell { padding: var(--space-5); }

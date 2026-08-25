@@ -25,6 +25,7 @@ evidence/private/
 
 # Playwright & E2E Testing artifacts
 .playwright-cli/
+.playwright/
 test-results/
 playwright-report/
 blob-report/
@@ -40,6 +41,7 @@ traces/
 dist/
 build/
 .next/
+.codex-worker-state/
 .next-runtime-acceptance-*/
 out/
 .nuxt/
@@ -81,6 +83,9 @@ inside.txt
 runtime-test.txt
 temptask.md
 tavily-*.json
+/slice*.diff
+/docs.zip
+/evidence.zip
 
 # Beads / Dolt files (added by bd init)
 .dolt/
